@@ -1,0 +1,17 @@
+# MakFleet Prototype Requirements
+
+# FastAPI and server
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+
+# Database - SQLite (no installation required)
+sqlalchemy==2.0.25
+
+# Pydantic for data validation
+pydantic==2.5.3
+
+# For environment variables
+python-dotenv==1.0.0
+
+# For IoT Simulator
+requests==2.31.0

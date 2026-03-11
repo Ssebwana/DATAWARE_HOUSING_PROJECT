@@ -1,0 +1,2046 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MakFleet | Fleet Management Dashboard</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            200: '#bfdbfe',
+                            300: '#93c5fd',
+                            400: '#60a5fa',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            800: '#1e40af',
+                            900: '#1e3a8a',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 10px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+        
+        /* Sidebar active state */
+        .nav-link.active {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+        }
+        
+        /* Card hover effect */
+        .stat-card {
+            transition: all 0.3s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Table row hover */
+        tbody tr:hover {
+            background-color: #f8fafc;
+        }
+        
+        /* Map marker animation */
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+        }
+        
+        .marker-pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        /* Glass effect */
+        .glass {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+        }
+        
+        /* Loading spinner */
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Toast notification */
+        .toast {
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        /* Leaflet popup responsive fixes */
+        .leaflet-popup-content-wrapper {
+            border-radius: 12px;
+            padding: 0;
+        }
+        
+        .leaflet-popup-content {
+            margin: 12px 14px;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        
+        .leaflet-popup-content b {
+            font-size: 14px;
+            display: block;
+            margin-bottom: 4px;
+        }
+        
+        /* Ensure popup doesn't overflow on mobile */
+        @media (max-width: 640px) {
+            .leaflet-popup {
+                max-width: 200px !important;
+            }
+            .leaflet-popup-content {
+                margin: 8px 10px;
+                font-size: 12px;
+            }
+            .leaflet-popup-content b {
+                font-size: 13px;
+            }
+        }
+        
+        /* Custom marker popup styling */
+        .vehicle-popup-content {
+            min-width: 120px;
+        }
+        
+        .vehicle-popup-content hr {
+            margin: 6px 0;
+            border: none;
+            border-top: 1px solid #eee;
+        }
+        
+        /* Hide toggle button when sidebar is open on mobile */
+        body.sidebar-open #sidebar-toggle {
+            display: none !important;
+        }
+        
+        /* Ensure Leaflet popups appear above sidebar */
+        .leaflet-popup {
+            z-index: 100 !important;
+        }
+        
+        .leaflet-container {
+            z-index: 1;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    
+    <!-- Mobile Sidebar Toggle -->
+    <button id="sidebar-toggle" onclick="toggleSidebar()" class="lg:hidden fixed top-4 left-4 z-[60] w-10 h-10 sm:w-12 sm:h-12 bg-slate-800 text-white rounded-xl shadow-lg flex items-center justify-center">
+        <i class="fas fa-bars text-sm sm:text-base"></i>
+    </button>
+    
+    <!-- Sidebar Overlay (Mobile) -->
+    <div id="sidebar-overlay" class="lg:hidden fixed inset-0 bg-black/50 z-40 hidden" onclick="toggleSidebar()"></div>
+    
+    <!-- Sidebar -->
+    <aside id="sidebar" class="fixed left-0 top-0 h-full w-64 bg-gradient-to-b from-slate-900 to-slate-800 text-white z-50 shadow-2xl transform -translate-x-full lg:translate-x-0 transition-transform duration-300">
+        <!-- Logo -->
+        <div class="p-6 border-b border-slate-700">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-route text-white text-lg"></i>
+                </div>
+                <div class="flex-1">
+                    <h1 class="text-xl font-bold">MakFleet</h1>
+                    <p class="text-xs text-slate-400">Fleet Management</p>
+                </div>
+                <button onclick="toggleSidebar()" class="lg:hidden text-slate-400 hover:text-white">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Navigation -->
+        <nav class="p-4 space-y-2">
+            <a href="#" onclick="showPage('dashboard'); closeSidebarOnMobile()" class="nav-link active flex items-center gap-3 px-4 py-3 rounded-xl text-slate-300 hover:bg-slate-700/50 transition-all" data-page="dashboard">
+                <i class="fas fa-th-large w-5"></i>
+                <span class="font-medium">Dashboard</span>
+            </a>
+            <a href="#" onclick="showPage('vehicles'); closeSidebarOnMobile()" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl text-slate-300 hover:bg-slate-700/50 transition-all" data-page="vehicles">
+                <i class="fas fa-motorcycle w-5"></i>
+                <span class="font-medium">Vehicles</span>
+            </a>
+            <a href="#" onclick="showPage('drivers'); closeSidebarOnMobile()" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl text-slate-300 hover:bg-slate-700/50 transition-all" data-page="drivers">
+                <i class="fas fa-users w-5"></i>
+                <span class="font-medium">Drivers</span>
+            </a>
+            <a href="#" onclick="showPage('events'); closeSidebarOnMobile()" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl text-slate-300 hover:bg-slate-700/50 transition-all" data-page="events">
+                <i class="fas fa-exclamation-triangle w-5"></i>
+                <span class="font-medium">Events</span>
+            </a>
+            <a href="#" onclick="showPage('analytics'); closeSidebarOnMobile()" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl text-slate-300 hover:bg-slate-700/50 transition-all" data-page="analytics">
+                <i class="fas fa-chart-line w-5"></i>
+                <span class="font-medium">Analytics</span>
+            </a>
+            <a href="#" onclick="showPage('map'); closeSidebarOnMobile()" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl text-slate-300 hover:bg-slate-700/50 transition-all" data-page="map">
+                <i class="fas fa-map-marked-alt w-5"></i>
+                <span class="font-medium">Live Map</span>
+            </a>
+        </nav>
+        
+        <!-- System Status -->
+        <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-700">
+            <div class="flex items-center gap-2 text-sm text-slate-400">
+                <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                <span>System Online</span>
+            </div>
+        </div>
+    </aside>
+    
+    <!-- Main Content -->
+    <main class="lg:ml-64 p-4 md:p-6 lg:p-8 pt-16 sm:pt-20 lg:pt-8">
+        
+        <!-- Header -->
+        <header class="flex items-center justify-between mb-8">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800" id="page-title">Dashboard</h1>
+                <p class="text-slate-500 mt-1" id="page-subtitle">Real-time fleet monitoring and analytics</p>
+            </div>
+            <div class="flex items-center gap-2 md:gap-4">
+                <!-- Simulator Control -->
+                <button onclick="toggleSimulator()" class="px-3 md:px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:from-green-600 hover:to-emerald-700 transition-all flex items-center gap-2 text-sm">
+                    <i class="fas fa-play"></i>
+                    <span class="hidden md:inline">Simulator</span>
+                    <span id="simulator-status" class="ml-1 w-2 h-2 bg-red-500 rounded-full inline-block"></span>
+                </button>
+                <button onclick="refreshAllData()" class="px-3 md:px-4 py-2 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-all flex items-center gap-2 text-slate-600 text-sm">
+                    <i class="fas fa-sync-alt"></i>
+                    <span class="hidden md:inline">Refresh</span>
+                </button>
+                <div>
+                    <button onclick="toggleNotifications()" class="w-10 h-10 bg-white border border-gray-200 rounded-xl flex items-center justify-center text-slate-600 hover:bg-gray-50 relative">
+                        <i class="fas fa-bell"></i>
+                        <span class="notification-badge absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center hidden">0</span>
+                    </button>
+                </div>
+                <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center text-white font-semibold">
+                    M
+                </div>
+            </div>
+        </header>
+        
+        <!-- DASHBOARD PAGE -->
+        <div id="page-dashboard" class="page-content">
+            <!-- Stats Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
+                <!-- Total Vehicles -->
+                <div class="stat-card bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                            <i class="fas fa-motorcycle text-blue-600 text-xl"></i>
+                        </div>
+                        <span class="text-green-500 text-sm font-medium flex items-center gap-1">
+                            <i class="fas fa-arrow-up"></i> 12%
+                        </span>
+                    </div>
+                    <h3 class="text-slate-500 text-sm">Total Vehicles</h3>
+                    <p class="text-3xl font-bold text-slate-800" id="stat-total-vehicles">0</p>
+                </div>
+                
+                <!-- Active Trips -->
+                <div class="stat-card bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                            <i class="fas fa-route text-green-600 text-xl"></i>
+                        </div>
+                        <span class="text-green-500 text-sm font-medium flex items-center gap-1">
+                            <i class="fas fa-arrow-up"></i> 8%
+                        </span>
+                    </div>
+                    <h3 class="text-slate-500 text-sm">Active Trips</h3>
+                    <p class="text-3xl font-bold text-slate-800" id="stat-active-trips">0</p>
+                </div>
+                
+                <!-- Total Events -->
+                <div class="stat-card bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
+                            <i class="fas fa-exclamation-circle text-amber-600 text-xl"></i>
+                        </div>
+                        <span class="text-red-500 text-sm font-medium flex items-center gap-1">
+                            <i class="fas fa-arrow-up"></i> 5%
+                        </span>
+                    </div>
+                    <h3 class="text-slate-500 text-sm">Events (24h)</h3>
+                    <p class="text-3xl font-bold text-slate-800" id="stat-total-events">0</p>
+                </div>
+                
+                <!-- High Risk -->
+                <div class="stat-card bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+                            <i class="fas fa-shield-alt text-red-600 text-xl"></i>
+                        </div>
+                        <span class="text-green-500 text-sm font-medium flex items-center gap-1">
+                            <i class="fas fa-arrow-down"></i> 3%
+                        </span>
+                    </div>
+                    <h3 class="text-slate-500 text-sm">High Risk Drivers</h3>
+                    <p class="text-3xl font-bold text-slate-800" id="stat-high-risk">0</p>
+                </div>
+            </div>
+            
+            <!-- Map and Charts Row -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
+                <!-- Map -->
+                <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="p-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
+                        <h3 class="font-semibold text-slate-800">Live Vehicle Tracking</h3>
+                        <div class="flex items-center gap-2 text-xs sm:text-sm">
+                            <span class="flex items-center gap-1"><span class="w-2 h-2 sm:w-3 sm:h-3 bg-blue-500 rounded-full"></span> Normal</span>
+                            <span class="flex items-center gap-1"><span class="w-2 h-2 sm:w-3 sm:h-3 bg-amber-500 rounded-full"></span> Warning</span>
+                            <span class="flex items-center gap-1"><span class="w-2 h-2 sm:w-3 sm:h-3 bg-red-500 rounded-full"></span> Alert</span>
+                        </div>
+                    </div>
+                    <div id="dashboard-map" class="h-64 sm:h-80 relative z-0"></div>
+                </div>
+                
+                <!-- Event Distribution -->
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-6">
+                    <h3 class="font-semibold text-slate-800 mb-4">Event Distribution</h3>
+                    <div class="h-48 md:h-64">
+                        <canvas id="eventChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Recent Events Table -->
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100">
+                <div class="p-4 border-b border-gray-100 flex items-center justify-between">
+                    <h3 class="font-semibold text-slate-800">Recent Safety Events</h3>
+                    <button onclick="showPage('events')" class="text-blue-600 text-sm hover:underline">View All</button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 md:px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Event Type</th>
+                                <th class="px-4 md:px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Vehicle</th>
+                                <th class="px-4 md:px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase hidden md:table-cell">Driver</th>
+                                <th class="px-4 md:px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Speed</th>
+                                <th class="px-4 md:px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Severity</th>
+                                <th class="px-4 md:px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase hidden md:table-cell">Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recent-events-body" class="divide-y divide-gray-100">
+                            <tr>
+                                <td colspan="6" class="px-4 md:px-6 py-8 text-center text-slate-500">Loading events...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ANALYTICS PAGE -->
+        
+        <!-- VEHICLES PAGE -->
+        <div id="page-vehicles" class="page-content hidden">
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100">
+                <div class="p-4 border-b border-gray-100 flex items-center justify-between">
+                    <div class="flex items-center gap-4">
+                        <input type="search" placeholder="Search vehicles..." class="px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" id="vehicle-search">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="showAddVehicleModal()" class="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all">
+                            <i class="fas fa-plus mr-2"></i>Add Vehicle
+                        </button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Plate Number</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Model</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Driver</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Speed</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Fuel</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Engine</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="vehicles-body" class="divide-y divide-gray-100">
+                            <tr>
+                                <td colspan="9" class="px-6 py-8 text-center text-slate-500">Loading vehicles...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- DRIVERS PAGE -->
+        <div id="page-drivers" class="page-content hidden">
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100">
+                <div class="p-4 border-b border-gray-100">
+                    <input type="search" placeholder="Search drivers..." class="px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full max-w-md">
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Name</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Phone</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">License</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Vehicle</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Risk Score</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="drivers-body" class="divide-y divide-gray-100">
+                            <tr>
+                                <td colspan="7" class="px-6 py-8 text-center text-slate-500">Loading drivers...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- EVENTS PAGE -->
+        <div id="page-events" class="page-content hidden">
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-6">
+                <div class="p-4 border-b border-gray-100 flex flex-wrap items-center gap-4">
+                    <select class="px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" id="event-filter-type">
+                        <option value="">All Event Types</option>
+                        <option value="HARSH_BRAKING">Harsh Braking</option>
+                        <option value="OVERSPEED">Overspeed</option>
+                        <option value="RAPID_ACCELERATION">Rapid Acceleration</option>
+                        <option value="IDLING">Idling</option>
+                    </select>
+                    <select class="px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" id="event-filter-severity">
+                        <option value="">All Severities</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                    </select>
+                    <button onclick="loadEvents()" class="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700">
+                        Apply Filters
+                    </button>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100">
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Event Type</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Vehicle</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Driver</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Speed</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Severity</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Location</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="events-body" class="divide-y divide-gray-100">
+                            <tr>
+                                <td colspan="8" class="px-6 py-8 text-center text-slate-500">Loading events...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ANALYTICS PAGE -->
+        <div id="page-analytics" class="page-content hidden">
+            <!-- Stats -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                    <h3 class="text-slate-500 text-sm mb-2">Harsh Braking</h3>
+                    <p class="text-3xl font-bold text-red-500" id="stat-harsh">0</p>
+                </div>
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                    <h3 class="text-slate-500 text-sm mb-2">Overspeed</h3>
+                    <p class="text-3xl font-bold text-amber-500" id="stat-overspeed">0</p>
+                </div>
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                    <h3 class="text-slate-500 text-sm mb-2">Avg Speed (24h)</h3>
+                    <p class="text-3xl font-bold text-blue-500" id="stat-avg-speed">0 km/h</p>
+                </div>
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                    <h3 class="text-slate-500 text-sm mb-2">Dangerous Zones</h3>
+                    <p class="text-3xl font-bold text-purple-500" id="stat-zones">0</p>
+                </div>
+            </div>
+            
+            <!-- Charts -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                    <h3 class="font-semibold text-slate-800 mb-4">Driver Risk Rankings</h3>
+                    <div class="h-72">
+                        <canvas id="riskChart"></canvas>
+                    </div>
+                </div>
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                    <h3 class="font-semibold text-slate-800 mb-4">Events by Type</h3>
+                    <div class="h-72">
+                        <canvas id="analyticsPieChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Dangerous Zones -->
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100">
+                <div class="p-4 border-b border-gray-100">
+                    <h3 class="font-semibold text-slate-800">Dangerous Zones Analysis</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Location</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Total Events</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Harsh Braking</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Overspeed</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Rapid Accel</th>
+                            </tr>
+                        </thead>
+                        <tbody id="zones-body" class="divide-y divide-gray-100">
+                            <tr>
+                                <td colspan="5" class="px-6 py-8 text-center text-slate-500">Loading zones...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- MAP PAGE -->
+        <div id="page-map" class="page-content hidden">
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <!-- Floating Close Button -->
+                <button onclick="showPage('dashboard')" class="absolute top-4 right-4 z-[1000] w-10 h-10 bg-white hover:bg-gray-100 rounded-full shadow-lg flex items-center justify-center text-slate-600 hover:text-slate-800 transition-all" title="Close map (back to dashboard)">
+                    <i class="fas fa-times text-lg"></i>
+                </button>
+                <div class="p-4 border-b border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div class="flex items-center gap-3">
+                        <button onclick="showPage('dashboard')" class="w-8 h-8 bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center justify-center text-slate-600 transition-colors" title="Close map">
+                            <i class="fas fa-times"></i>
+                        </button>
+                        <h3 class="font-semibold text-slate-800">Live Fleet Map</h3>
+                    </div>
+                    <div id="tracking-indicator" class="hidden flex-wrap items-center gap-2 px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-sm">
+                        <i class="fas fa-crosshairs animate-pulse"></i>
+                        <span id="tracking-vehicle-name">Tracking...</span>
+                        <button onclick="stopTracking()" class="ml-2 hover:text-green-900" title="Stop tracking">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 text-sm">
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" id="show-vehicles" checked class="rounded text-blue-600">
+                            <span class="hidden sm:inline">Show Vehicles</span>
+                        </label>
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" id="show-events" checked class="rounded text-blue-600">
+                            <span class="hidden sm:inline">Show Events</span>
+                        </label>
+                    </div>
+                </div>
+                <div id="full-map" class="h-[50vh] sm:h-[60vh] lg:h-[calc(100vh-200px)]"></div>
+            </div>
+        </div>
+        
+    </main>
+    
+    <!-- Add Vehicle Modal -->
+    <div id="add-vehicle-modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+            <div class="p-6 border-b border-gray-100">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-xl font-bold text-slate-800">Add New Vehicle</h3>
+                    <button onclick="closeAddVehicleModal()" class="text-slate-400 hover:text-slate-600">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+            </div>
+            <form id="add-vehicle-form" class="p-6 space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Plate Number *</label>
+                        <input type="text" id="new-vehicle-plate" required class="w-full px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="UGD-1234">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Model *</label>
+                        <input type="text" id="new-vehicle-model" required class="w-full px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Yamaha NMAX">
+                    </div>
+                </div>
+                <div class="border-t border-gray-100 pt-4 mt-4">
+                    <h4 class="font-semibold text-slate-800 mb-3">Driver Information</h4>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Driver Name *</label>
+                        <input type="text" id="new-driver-name" required class="w-full px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="John Doe">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Phone *</label>
+                        <input type="tel" id="new-driver-phone" required class="w-full px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="+256 700 123456">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">License Number *</label>
+                    <input type="text" id="new-driver-license" required class="w-full px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="DL-12345678">
+                </div>
+                <div class="flex justify-end gap-3 pt-4">
+                    <button type="button" onclick="closeAddVehicleModal()" class="px-4 py-2 border border-gray-200 rounded-xl text-slate-600 hover:bg-gray-50">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700">Add Vehicle</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Vehicle Profile Modal -->
+    <div id="vehicle-profile-modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4">
+            <div class="p-6 border-b border-gray-100">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-xl font-bold text-slate-800">Vehicle Profile</h3>
+                    <button onclick="closeVehicleProfileModal()" class="text-slate-400 hover:text-slate-600">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+            </div>
+            <div id="vehicle-profile-content" class="p-6">
+                <!-- Dynamic content -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- Driver Profile Modal -->
+    <div id="driver-profile-modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4">
+            <div class="p-6 border-b border-gray-100">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-xl font-bold text-slate-800">Driver Profile</h3>
+                    <button onclick="closeDriverProfileModal()" class="text-slate-400 hover:text-slate-600">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+            </div>
+            <div id="driver-profile-content" class="p-6">
+                <!-- Dynamic content -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- Notifications Panel -->
+    <div id="notifications-panel" class="fixed right-0 top-0 h-full w-80 bg-white shadow-2xl z-50 transform translate-x-full transition-transform duration-300">
+        <div class="p-4 border-b border-gray-100 flex items-center justify-between">
+            <h3 class="font-bold text-slate-800">Notifications</h3>
+            <button onclick="toggleNotifications()" class="text-slate-400 hover:text-slate-600">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        <div id="notifications-list" class="p-4 space-y-3 overflow-y-auto h-full pb-20">
+            <!-- Dynamic notifications -->
+        </div>
+    </div>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // Configuration
+        const API_BASE = 'http://localhost:8000';
+        
+        // Debug - show this message when page loads
+        console.log('MakFleet Dashboard v2.0 loaded');
+        
+        // Global variables
+        let dashboardMap, fullMap;
+        let vehicleMarkers = {};
+        let eventMarkers = [];
+        let eventChart, riskChart, analyticsPieChart;
+        let simulatorInterval = null;
+        let trackedVehicleId = null;
+        let trackedMarker = null;
+        let isSimulatorRunning = false;
+        let dashboardRefreshInterval = null;
+        let trackingInterval = null;
+        
+        // Sidebar Toggle (Mobile)
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            
+            if (sidebar.classList.contains('-translate-x-full')) {
+                // Sidebar is hidden - show it
+                sidebar.classList.remove('-translate-x-full');
+                overlay.classList.remove('hidden');
+                document.body.classList.add('sidebar-open');
+            } else {
+                // Sidebar is visible - hide it
+                sidebar.classList.add('-translate-x-full');
+                overlay.classList.add('hidden');
+                document.body.classList.remove('sidebar-open');
+            }
+        }
+        
+        // Ensure sidebar toggle button is always visible on mobile
+        // Also close sidebar when clicking on main content
+        document.addEventListener('DOMContentLoaded', function() {
+            const toggleBtn = document.getElementById('sidebar-toggle');
+            if (toggleBtn) {
+                toggleBtn.style.display = 'flex';
+            }
+            
+            // Close sidebar when clicking on main content on mobile
+            // Only close sidebar when tracking a vehicle (via eye/track button)
+            const mainContent = document.querySelector('main');
+            if (mainContent) {
+                mainContent.addEventListener('click', function(e) {
+                    // Close sidebar when clicking on main content (maps, buttons, etc.)
+                    // but not when clicking on sidebar itself
+                    const sidebar = document.getElementById('sidebar');
+                    if (window.innerWidth < 1024 && !sidebar.classList.contains('-translate-x-full')) {
+                        // Only close sidebar if actively tracking a vehicle
+                        if (trackedVehicleId && !e.target.closest('#sidebar') && !e.target.closest('#sidebar-toggle')) {
+                            closeSidebarOnMobile();
+                        }
+                    }
+                });
+            }
+        });
+        
+        // Track a specific vehicle
+        function trackVehicle(vehicleId, plateNumber, driverName) {
+            trackedVehicleId = vehicleId;
+            showToast(`Tracking ${plateNumber} - Live updates every 2s`, 'info');
+            
+            // Update tracking indicator
+            const indicator = document.getElementById('tracking-indicator');
+            const vehicleName = document.getElementById('tracking-vehicle-name');
+            indicator.classList.remove('hidden');
+            indicator.classList.add('flex');
+            vehicleName.textContent = `${plateNumber} - ${driverName}`;
+            
+            // Navigate to map page
+            showPage('map');
+            
+            // Update the UI to show tracking is active
+            updateTrackedVehicleUI();
+        }
+        
+        // Update UI to show tracked vehicle
+        function updateTrackedVehicleUI() {
+            // Update all eye buttons to show which one is active
+            document.querySelectorAll('[onclick^="trackVehicle"]').forEach(btn => {
+                const onclick = btn.getAttribute('onclick');
+                const match = onclick.match(/trackVehicle\((\d+)/);
+                if (match && parseInt(match[1]) === trackedVehicleId) {
+                    btn.innerHTML = '<i class="fas fa-eye text-green-500"></i>';
+                    btn.classList.add('scale-110');
+                } else {
+                    btn.innerHTML = '<i class="fas fa-eye"></i>';
+                    btn.classList.remove('scale-110');
+                }
+            });
+        }
+        
+        // Stop tracking
+        function stopTracking() {
+            trackedVehicleId = null;
+            if (trackedMarker) {
+                trackedMarker.remove();
+                trackedMarker = null;
+            }
+            if (trackingInterval) {
+                clearInterval(trackingInterval);
+            }
+            
+            // Hide tracking indicator
+            const indicator = document.getElementById('tracking-indicator');
+            indicator.classList.add('hidden');
+            indicator.classList.remove('flex');
+            
+            showToast('Stopped tracking vehicle', 'info');
+            updateTrackedVehicleUI();
+        }
+        
+        // Simulator Control
+        function toggleSimulator() {
+            const statusEl = document.getElementById('simulator-status');
+            
+            if (simulatorInterval) {
+                // Stop simulator
+                clearInterval(simulatorInterval);
+                simulatorInterval = null;
+                isSimulatorRunning = false;
+                statusEl.classList.remove('bg-green-500');
+                statusEl.classList.add('bg-red-500');
+                showToast('Simulator stopped', 'info');
+                
+                // Reset dashboard refresh to normal
+                setupDashboardRefresh(false);
+            } else {
+                // Start simulator
+                startSimulator();
+                isSimulatorRunning = true;
+                statusEl.classList.remove('bg-red-500');
+                statusEl.classList.add('bg-green-500');
+                showToast('Simulator started - Generating telemetry data', 'success');
+                
+                // Set up fast dashboard refresh
+                setupDashboardRefresh(true);
+            }
+        }
+        
+        // Setup dashboard auto-refresh
+        function setupDashboardRefresh(fast) {
+            if (dashboardRefreshInterval) {
+                clearInterval(dashboardRefreshInterval);
+            }
+            
+            // Fast refresh (2s) when simulator running, normal (10s) otherwise
+            const interval = fast ? 2000 : 10000;
+            dashboardRefreshInterval = setInterval(() => {
+                const currentPage = document.querySelector('.nav-link.active').dataset.page;
+                if (currentPage === 'dashboard') {
+                    loadDashboardData();
+                }
+            }, interval);
+        }
+        
+        // Start Simulator
+        async function startSimulator() {
+            // Get vehicles
+            const vehiclesRes = await fetch(`${API_BASE}/api/vehicles`);
+            const vehicles = await vehiclesRes.json();
+            
+            if (vehicles.length === 0) {
+                showToast('No vehicles available', 'error');
+                return;
+            }
+            
+            // Generate telemetry every 2 seconds and refresh dashboard
+            simulatorInterval = setInterval(async () => {
+                const vehicle = vehicles[Math.floor(Math.random() * vehicles.length)];
+                
+                // Random position around Makerere University
+                const lat = 0.3336 + (Math.random() - 0.5) * 0.005;
+                const lng = 32.5671 + (Math.random() - 0.5) * 0.005;
+                
+                // Random speed and acceleration
+                const speed = Math.random() * 80;
+                const acceleration = (Math.random() - 0.5) * 10;
+                const engineTemp = 70 + Math.random() * 40; // 70-110°C
+                const fuelLevel = 20 + Math.random() * 75; // 20-95%
+                
+                const telemetryData = {
+                    vehicle_id: vehicle.vehicle_id,
+                    latitude: lat,
+                    longitude: lng,
+                    speed: speed,
+                    acceleration: acceleration,
+                    engine_temp: engineTemp,
+                    fuel_level: fuelLevel,
+                    timestamp: new Date().toISOString()
+                };
+                
+                try {
+                    await fetch(`${API_BASE}/api/telemetry`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(telemetryData)
+                    });
+                    
+                    // Live update dashboard when simulator is running
+                    loadDashboardData();
+                    
+                } catch (error) {
+                    console.error('Simulator error:', error);
+                }
+            }, 2000);
+        }
+        
+        // Toast Notification
+        function showToast(message, type = 'info') {
+            const colors = {
+                success: 'bg-green-500',
+                error: 'bg-red-500',
+                info: 'bg-blue-500',
+                warning: 'bg-amber-500'
+            };
+            
+            const toast = document.createElement('div');
+            toast.className = `fixed top-4 right-4 ${colors[type]} text-white px-6 py-3 rounded-xl shadow-lg z-50 toast`;
+            toast.innerHTML = `
+                <div class="flex items-center gap-3">
+                    <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'times-circle' : type === 'warning' ? 'exclamation-circle' : 'info-circle'}"></i>
+                    <span>${message}</span>
+                </div>
+            `;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.remove();
+            }, 3000);
+        }
+        
+        // Navigation
+        function showPage(pageName) {
+            // Update nav
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+                if (link.dataset.page === pageName) {
+                    link.classList.add('active');
+                }
+            });
+            
+            // Update page
+            document.querySelectorAll('.page-content').forEach(page => {
+                page.classList.add('hidden');
+            });
+            document.getElementById(`page-${pageName}`).classList.remove('hidden');
+            
+            // Update title
+            const titles = {
+                dashboard: ['Dashboard', 'Real-time fleet monitoring and analytics'],
+                vehicles: ['Vehicles', 'Manage your fleet vehicles'],
+                drivers: ['Drivers', 'Monitor driver performance and risk'],
+                events: ['Safety Events', 'View and analyze safety incidents'],
+                analytics: ['Analytics', 'Insights and trends'],
+                map: ['Live Map', 'Real-time vehicle tracking']
+            };
+            document.getElementById('page-title').textContent = titles[pageName][0];
+            document.getElementById('page-subtitle').textContent = titles[pageName][1];
+            
+            // Load data for page
+            if (pageName === 'dashboard') loadDashboardData();
+            else if (pageName === 'vehicles') { loadVehicles(); updateTrackedVehicleUI(); }
+            else if (pageName === 'drivers') loadDrivers();
+            else if (pageName === 'events') loadEvents();
+            else if (pageName === 'analytics') loadAnalytics();
+            else if (pageName === 'map') initFullMap();
+        }
+        
+        // Refresh all data
+        function refreshAllData() {
+            const currentPage = document.querySelector('.nav-link.active').dataset.page;
+            showPage(currentPage);
+        }
+        
+        // Load Dashboard Data
+        async function loadDashboardData() {
+            try {
+                // Vehicles
+                const vehiclesRes = await fetch(`${API_BASE}/api/vehicles`);
+                const vehicles = await vehiclesRes.json();
+                document.getElementById('stat-total-vehicles').textContent = vehicles.length;
+                
+                // Active trips
+                const telemetryRes = await fetch(`${API_BASE}/api/telemetry/latest`);
+                const telemetry = await telemetryRes.json();
+                document.getElementById('stat-active-trips').textContent = telemetry.length;
+                
+                // Events
+                const eventRes = await fetch(`${API_BASE}/api/events/summary?hours=24`);
+                const eventSummary = await eventRes.json();
+                document.getElementById('stat-total-events').textContent = eventSummary.total || 0;
+                
+                // Risk
+                const riskRes = await fetch(`${API_BASE}/api/events/driver-risk?days=7`);
+                const riskData = await riskRes.json();
+                const highRisk = riskData.filter(d => d.total_score >= 20).length;
+                document.getElementById('stat-high-risk').textContent = highRisk;
+                
+                // Update map
+                updateDashboardMap(telemetry);
+                
+                // Update chart
+                updateEventChart(eventSummary);
+                
+                // Load recent events
+                loadRecentEvents();
+                
+                // Check for new events and notifications
+                checkForNewEvents();
+                
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+            }
+        }
+        
+        // Load Vehicles
+        async function loadVehicles() {
+            try {
+                console.log('Loading vehicles...');
+                const [vehiclesRes, telemetryRes] = await Promise.all([
+                    fetch(`${API_BASE}/api/vehicles/`),
+                    fetch(`${API_BASE}/api/telemetry/latest`)
+                ]);
+                
+                const vehicles = await vehiclesRes.json();
+                const telemetry = await telemetryRes.json();
+                console.log('Vehicles loaded:', vehicles.length);
+                console.log('Telemetry loaded:', telemetry.length);
+                
+                const telemetryByVehicle = {};
+                telemetry.forEach(t => telemetryByVehicle[t.vehicle_id] = t);
+                
+                const tbody = document.getElementById('vehicles-body');
+                
+                if (vehicles.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="9" class="px-6 py-8 text-center text-slate-500">No vehicles found. Add a vehicle to get started.</td></tr>';
+                    return;
+                }
+                
+                tbody.innerHTML = vehicles.map(v => {
+                    const t = telemetryByVehicle[v.vehicle_id];
+                    const speed = t ? t.speed : 0;
+                    const fuel = t ? t.fuel_level : 0;
+                    const engine = t ? t.engine_temp : 0;
+                    const driverName = v.driver ? v.driver.name : 'Unassigned';
+                    const driverId = v.driver ? v.driver.driver_id : 0;
+                    const fuelColor = fuel < 20 ? 'text-red-500' : fuel < 40 ? 'text-amber-500' : 'text-green-500';
+                    const engineColor = engine > 100 ? 'text-red-500' : engine > 90 ? 'text-amber-500' : 'text-green-500';
+                    return `
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 text-slate-600">${v.vehicle_id}</td>
+                            <td class="px-6 py-4 font-semibold text-slate-800">${v.plate_number}</td>
+                            <td class="px-6 py-4 text-slate-600">${v.model}</td>
+                            <td class="px-6 py-4">
+                                <button onclick="showDriverProfile(${driverId})" class="text-blue-600 hover:text-blue-800 font-medium">${driverName}</button>
+                            </td>
+                            <td class="px-6 py-4"><span class="px-3 py-1 ${speed > 0 ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-700'} rounded-full text-xs font-medium">${speed > 0 ? 'Active' : 'Idle'}</span></td>
+                            <td class="px-6 py-4 font-medium ${speed > 60 ? 'text-red-500' : speed > 40 ? 'text-amber-500' : 'text-slate-700'}">${speed.toFixed(1)} km/h</td>
+                            <td class="px-6 py-4 font-medium ${fuelColor}">${fuel.toFixed(1)}%</td>
+                            <td class="px-6 py-4 font-medium ${engineColor}">${engine.toFixed(1)}°C</td>
+                            <td class="px-6 py-4">
+                                <button onclick="showVehicleProfile(${v.vehicle_id})" class="text-blue-600 hover:text-blue-800 mr-2" title="View profile"><i class="fas fa-user-circle"></i></button>
+                                <button onclick="trackVehicle(${v.vehicle_id}, '${v.plate_number}', '${driverName}')" class="text-slate-600 hover:text-slate-800 mr-2" title="Track vehicle"><i class="fas fa-eye"></i></button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+                
+                console.log('Vehicles rendered successfully');
+                
+            } catch (error) {
+                console.error('Error loading vehicles:', error);
+                const tbody = document.getElementById('vehicles-body');
+                tbody.innerHTML = '<tr><td colspan="9" class="px-6 py-8 text-center text-red-500">Error loading vehicles. Make sure the API server is running.</td></tr>';
+            }
+        }
+        
+        // Load Drivers
+        async function loadDrivers() {
+            try {
+                const [driversRes, riskRes] = await Promise.all([
+                    fetch(`${API_BASE}/api/vehicles/drivers/`),
+                    fetch(`${API_BASE}/api/events/driver-risk?days=7`)
+                ]);
+                
+                const drivers = await driversRes.json();
+                const riskData = await riskRes.json();
+                const riskByDriver = {};
+                riskData.forEach(d => riskByDriver[d.driver_id] = d);
+                
+                const tbody = document.getElementById('drivers-body');
+                tbody.innerHTML = drivers.map(d => {
+                    const risk = riskByDriver[d.driver_id];
+                    const riskScore = risk ? risk.total_score : 0;
+                    const vehicle = d.vehicles && d.vehicles.length > 0 ? d.vehicles[0] : null;
+                    
+                    let riskBadge = '';
+                    if (riskScore >= 20) riskBadge = '<span class="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium">High Risk</span>';
+                    else if (riskScore >= 10) riskBadge = '<span class="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">Medium</span>';
+                    else riskBadge = '<span class="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">Safe</span>';
+                    
+                    return `
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 text-slate-600">${d.driver_id}</td>
+                            <td class="px-6 py-4 font-semibold text-slate-800">${d.name}</td>
+                            <td class="px-6 py-4 text-slate-600">${d.phone}</td>
+                            <td class="px-6 py-4 text-slate-600">${d.license_number}</td>
+                            <td class="px-6 py-4 text-slate-600">${vehicle ? vehicle.plate_number : 'N/A'}</td>
+                            <td class="px-6 py-4 font-bold ${riskScore >= 20 ? 'text-red-500' : riskScore >= 10 ? 'text-amber-500' : 'text-green-500'}">${riskScore}</td>
+                            <td class="px-6 py-4">${riskBadge}</td>
+                        </tr>
+                    `;
+                }).join('');
+                
+            } catch (error) {
+                console.error('Error loading drivers:', error);
+            }
+        }
+        
+        // Load Events
+        async function loadEvents() {
+            try {
+                const typeFilter = document.getElementById('event-filter-type').value;
+                const severityFilter = document.getElementById('event-filter-severity').value;
+                
+                let url = `${API_BASE}/api/events?hours=720&limit=100`;
+                if (typeFilter) url += `&event_type=${typeFilter}`;
+                
+                const response = await fetch(url);
+                let events = await response.json();
+                
+                if (severityFilter) {
+                    events = events.filter(e => e.severity === severityFilter);
+                }
+                
+                const tbody = document.getElementById('events-body');
+                if (events.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-8 text-center text-slate-500">No events found</td></tr>';
+                    return;
+                }
+                
+                tbody.innerHTML = events.map(e => {
+                    const typeColors = {
+                        'HARSH_BRAKING': 'bg-red-100 text-red-700',
+                        'OVERSPEED': 'bg-amber-100 text-amber-700',
+                        'RAPID_ACCELERATION': 'bg-purple-100 text-purple-700',
+                        'IDLING': 'bg-slate-100 text-slate-700'
+                    };
+                    const severityColors = {
+                        'high': 'bg-red-100 text-red-700',
+                        'medium': 'bg-amber-100 text-amber-700',
+                        'low': 'bg-blue-100 text-blue-700'
+                    };
+                    
+                    return `
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 text-slate-600">${e.event_id}</td>
+                            <td class="px-6 py-4"><span class="px-3 py-1 ${typeColors[e.event_type] || 'bg-gray-100'} rounded-full text-xs font-medium">${e.event_type.replace('_', ' ')}</span></td>
+                            <td class="px-6 py-4 font-semibold text-slate-800">${e.plate_number}</td>
+                            <td class="px-6 py-4 text-slate-600">${e.driver_name}</td>
+                            <td class="px-6 py-4 text-slate-600">${e.speed ? e.speed.toFixed(1) + ' km/h' : 'N/A'}</td>
+                            <td class="px-6 py-4"><span class="px-3 py-1 ${severityColors[e.severity] || 'bg-gray-100'} rounded-full text-xs font-medium">${e.severity}</span></td>
+                            <td class="px-6 py-4 text-slate-600 text-sm">${e.latitude.toFixed(4)}, ${e.longitude.toFixed(4)}</td>
+                            <td class="px-6 py-4 text-slate-600 text-sm">${new Date(e.timestamp).toLocaleString()}</td>
+                        </tr>
+                    `;
+                }).join('');
+                
+            } catch (error) {
+                console.error('Error loading events:', error);
+            }
+        }
+        
+        // Load Recent Events (for dashboard)
+        async function loadRecentEvents() {
+            try {
+                const response = await fetch(`${API_BASE}/api/events?hours=24&limit=10`);
+                const events = await response.json();
+                
+                const tbody = document.getElementById('recent-events-body');
+                if (events.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-slate-500">No events recorded</td></tr>';
+                    return;
+                }
+                
+                const typeColors = {
+                    'HARSH_BRAKING': 'bg-red-100 text-red-700',
+                    'OVERSPEED': 'bg-amber-100 text-amber-700',
+                    'RAPID_ACCELERATION': 'bg-purple-100 text-purple-700',
+                    'IDLING': 'bg-slate-100 text-slate-700'
+                };
+                const severityColors = {
+                    'high': 'bg-red-100 text-red-700',
+                    'medium': 'bg-amber-100 text-amber-700',
+                    'low': 'bg-blue-100 text-blue-700'
+                };
+                
+                tbody.innerHTML = events.map(e => `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4"><span class="px-3 py-1 ${typeColors[e.event_type] || 'bg-gray-100'} rounded-full text-xs font-medium">${e.event_type.replace('_', ' ')}</span></td>
+                        <td class="px-6 py-4 font-semibold text-slate-800">${e.plate_number}</td>
+                        <td class="px-6 py-4 text-slate-600">${e.driver_name}</td>
+                        <td class="px-6 py-4 text-slate-600">${e.speed ? e.speed.toFixed(1) + ' km/h' : 'N/A'}</td>
+                        <td class="px-6 py-4"><span class="px-3 py-1 ${severityColors[e.severity] || 'bg-gray-100'} rounded-full text-xs font-medium">${e.severity}</span></td>
+                        <td class="px-6 py-4 text-slate-600 text-sm">${new Date(e.timestamp).toLocaleTimeString()}</td>
+                    </tr>
+                `).join('');
+                
+            } catch (error) {
+                console.error('Error loading recent events:', error);
+            }
+        }
+        
+        // Load Analytics
+        async function loadAnalytics() {
+            try {
+                // Event summary
+                const eventRes = await fetch(`${API_BASE}/api/events/summary?hours=24`);
+                const eventSummary = await eventRes.json();
+                
+                document.getElementById('stat-harsh').textContent = eventSummary.HARSH_BRAKING || 0;
+                document.getElementById('stat-overspeed').textContent = eventSummary.OVERSPEED || 0;
+                
+                // Average speed
+                const telemetryRes = await fetch(`${API_BASE}/api/telemetry/recent?limit=1000`);
+                const telemetry = await telemetryRes.json();
+                const avgSpeed = telemetry.length > 0 ? telemetry.reduce((s, t) => s + t.speed, 0) / telemetry.length : 0;
+                document.getElementById('stat-avg-speed').textContent = avgSpeed.toFixed(1) + ' km/h';
+                
+                // Zones
+                const zonesRes = await fetch(`${API_BASE}/api/events/dangerous-zones?hours=24`);
+                const zones = await zonesRes.json();
+                document.getElementById('stat-zones').textContent = zones.length;
+                
+                // Charts
+                updateAnalyticsPieChart(eventSummary);
+                
+                const riskRes = await fetch(`${API_BASE}/api/events/driver-risk?days=7`);
+                const riskData = await riskRes.json();
+                updateRiskChart(riskData);
+                
+                // Zones table
+                document.getElementById('zones-body').innerHTML = zones.slice(0, 10).map(z => `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 font-medium text-slate-800">${z.latitude.toFixed(4)}, ${z.longitude.toFixed(4)}</td>
+                        <td class="px-6 py-4 font-bold text-slate-800">${z.events}</td>
+                        <td class="px-6 py-4 text-red-500">${z.types.HARSH_BRAKING || 0}</td>
+                        <td class="px-6 py-4 text-amber-500">${z.types.OVERSPEED || 0}</td>
+                        <td class="px-6 py-4 text-purple-500">${z.types.RAPID_ACCELERATION || 0}</td>
+                    </tr>
+                `).join('');
+                
+            } catch (error) {
+                console.error('Error loading analytics:', error);
+            }
+        }
+        
+        // Map Functions
+        // Dashboard Map initialization
+        let routePolylines = [];
+        
+        // Vehicle path tracking
+        let vehicleRoutes = {};
+        let vehiclePathPolylines = {};
+        
+        // Find nearest point on route
+        function findNearestPointOnRoute(position, route) {
+            let minDistance = Infinity;
+            let nearestIndex = 0;
+            for (let i = 0; i < route.length; i++) {
+                const point = route[i];
+                const dist = Math.sqrt(Math.pow(position[0] - point[0], 2) + Math.pow(position[1] - point[1], 2));
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    nearestIndex = i;
+                }
+            }
+            return { index: nearestIndex, distance: minDistance };
+        }
+        
+        // Get route for position
+        function getRouteForPosition(position) {
+            let minDistance = Infinity;
+            let nearestRoute = null;
+            let nearestRouteName = null;
+            for (const [routeName, routeCoords] of Object.entries(KAMPALA_ROUTES)) {
+                const { distance } = findNearestPointOnRoute(position, routeCoords);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestRoute = routeCoords;
+                    nearestRouteName = routeName;
+                }
+            }
+            return minDistance < 0.002 ? { route: nearestRoute, name: nearestRouteName } : null;
+        }
+        
+        // Update vehicle path on map
+        function updateVehiclePathOnMap(mapInstance, vehicleId, position, color = '#3b82f6') {
+            const routeInfo = getRouteForPosition(position);
+            if (routeInfo && routeInfo.route) {
+                vehicleRoutes[vehicleId] = routeInfo;
+                const { index: currentIndex } = findNearestPointOnRoute(position, routeInfo.route);
+                const pathCoords = routeInfo.route.slice(0, currentIndex + 1);
+                
+                if (vehiclePathPolylines[vehicleId]) {
+                    mapInstance.removeLayer(vehiclePathPolylines[vehicleId]);
+                }
+                
+                const pathPolyline = L.polyline(pathCoords, {
+                    color: color,
+                    weight: 4,
+                    opacity: 0.7,
+                    smoothFactor: 1
+                }).bindPopup(`<strong>Vehicle Path</strong><br>Route: ${routeInfo.name.replace('_', ' ').toUpperCase()}`);
+                
+                pathPolyline.addTo(mapInstance);
+                vehiclePathPolylines[vehicleId] = pathPolyline;
+            }
+        }
+        
+        // Clear vehicle path
+        function clearVehiclePathOnMap(vehicleId) {
+            if (vehiclePathPolylines[vehicleId]) {
+                dashboardMap.removeLayer(vehiclePathPolylines[vehicleId]);
+                delete vehiclePathPolylines[vehicleId];
+            }
+        }
+        
+        // Road routes for visualization
+        const KAMPALA_ROUTES = {
+            "makerere_main": [[0.3336, 32.5671], [0.3350, 32.5680], [0.3365, 32.5690], [0.3380, 32.5700], [0.3395, 32.5710], [0.3410, 32.5720], [0.3425, 32.5730], [0.3440, 32.5740]],
+            "gayaza_road": [[0.3336, 32.5671], [0.3350, 32.5700], [0.3370, 32.5730], [0.3390, 32.5760], [0.3410, 32.5790], [0.3430, 32.5820], [0.3450, 32.5850]],
+            "bombo_road": [[0.3336, 32.5671], [0.3350, 32.5690], [0.3370, 32.5710], [0.3390, 32.5730], [0.3410, 32.5750], [0.3430, 32.5770], [0.3450, 32.5790]],
+            "ng_road": [[0.3476, 32.5825], [0.3460, 32.5810], [0.3445, 32.5795], [0.3430, 32.5780], [0.3415, 32.5765], [0.3400, 32.5750]],
+            "port_bell_road": [[0.3476, 32.5825], [0.3485, 32.5800], [0.3495, 32.5780], [0.3505, 32.5760]],
+            "entebbe_road": [[0.3476, 32.5825], [0.3500, 32.5850], [0.3525, 32.5880], [0.3550, 32.5910], [0.3575, 32.5940]],
+            "kubika_road": [[0.3336, 32.5671], [0.3345, 32.5685], [0.3355, 32.5700], [0.3365, 32.5715], [0.3375, 32.5730]],
+            "kyebando": [[0.3395, 32.5710], [0.3410, 32.5730], [0.3425, 32.5750], [0.3440, 32.5770], [0.3455, 32.5790]],
+            "nties": [[0.3336, 32.5671], [0.3345, 32.5690], [0.3355, 32.5710], [0.3365, 32.5730], [0.3375, 32.5750], [0.3385, 32.5770]],
+            "makerere_to_kikoni": [[0.3336, 32.5671], [0.3350, 32.5650], [0.3365, 32.5630], [0.3380, 32.5610], [0.3395, 32.5590]]
+        };
+        
+        // Draw road routes on a map
+        function drawRoadRoutes(mapInstance) {
+            const routeColors = {
+                "makerere_main": '#1e3c72',
+                "gayaza_road": '#2ecc71',
+                "bombo_road": '#e74c3c',
+                "ng_road": '#9b59b6',
+                "port_bell_road": '#3498db',
+                "entebbe_road": '#f39c12',
+                "kubika_road": '#1abc9c',
+                "kyebando": '#e67e22',
+                "nties": '#34495e',
+                "makerere_to_kikoni": '#95a5a6'
+            };
+            
+            Object.keys(KAMPALA_ROUTES).forEach(routeName => {
+                const coordinates = KAMPALA_ROUTES[routeName];
+                const color = routeColors[routeName] || '#666';
+                
+                const polyline = L.polyline(coordinates, {
+                    color: color,
+                    weight: 4,
+                    opacity: 0.7,
+                    dashArray: '8, 8'
+                }).bindPopup(`<strong>${routeName.replace('_', ' ').toUpperCase()}</strong>`);
+                
+                polyline.addTo(mapInstance);
+                routePolylines.push(polyline);
+            });
+        }
+        
+        function initDashboardMap() {
+            if (dashboardMap) dashboardMap.remove();
+            
+            dashboardMap = L.map('dashboard-map', { zoomControl: true }).setView([0.3336, 32.5671], 16);
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap'
+            }).addTo(dashboardMap);
+            
+            // Road routes are drawn internally for path tracking but not shown on map
+            // drawRoadRoutes(dashboardMap);
+            
+            // Invalidate map size to ensure it renders correctly
+            setTimeout(() => {
+                dashboardMap.invalidateSize();
+            }, 100);
+        }
+        
+        function updateDashboardMap(vehicles) {
+            if (!dashboardMap) initDashboardMap();
+            
+            // Clear old markers that are no longer in the data
+            const currentVehicleIds = new Set(vehicles.map(v => v.vehicle_id));
+            Object.keys(vehicleMarkers).forEach(id => {
+                if (!currentVehicleIds.has(parseInt(id))) {
+                    vehicleMarkers[id].remove();
+                    delete vehicleMarkers[id];
+                }
+            });
+            
+            vehicles.forEach(v => {
+                // Determine marker color based on speed
+                const isHighSpeed = v.speed > 70;
+                const isMediumSpeed = v.speed > 50;
+                
+                // Create custom colored marker using Leaflet's built-in icon
+                const colorIcon = new L.Icon({
+                    iconUrl: isHighSpeed ? 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png' : 
+                              isMediumSpeed ? 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png' : 
+                              'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41],
+                    popupAnchor: [1, -34],
+                    shadowSize: [41, 41]
+                });
+                
+                const popupContent = `<div class="vehicle-popup-content"><b>${v.plate_number || 'Vehicle ' + v.vehicle_id}</b><hr><br>${v.driver_name || 'Unknown Driver'}<br>Speed: ${v.speed.toFixed(1)} km/h</div>`;
+                
+                if (vehicleMarkers[v.vehicle_id]) {
+                    // Update existing marker position and icon
+                    vehicleMarkers[v.vehicle_id].setLatLng([v.latitude, v.longitude]);
+                    vehicleMarkers[v.vehicle_id].setIcon(colorIcon);
+                    vehicleMarkers[v.vehicle_id].getPopup().setContent(popupContent);
+                    
+                    // Vehicle path tracking is disabled to show clean map like Google Maps
+                    // Path will be tracked internally but not displayed
+                    // const pathColor = v.speed > 70 ? '#ef4444' : v.speed > 50 ? '#f59e0b' : '#3b82f6';
+                    // updateVehiclePathOnMap(dashboardMap, v.vehicle_id, [v.latitude, v.longitude], pathColor);
+                } else {
+                    // Create new marker
+                    const marker = L.marker([v.latitude, v.longitude], { icon: colorIcon })
+                        .bindPopup(popupContent)
+                        .addTo(dashboardMap);
+                    vehicleMarkers[v.vehicle_id] = marker;
+                }
+            });
+        }
+        
+        function initFullMap() {
+            if (fullMap) fullMap.remove();
+            
+            fullMap = L.map('full-map').setView([0.3336, 32.5671], 16);
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap'
+            }).addTo(fullMap);
+            
+            // Road routes are drawn internally for path tracking but not shown on map
+            // drawRoadRoutes(fullMap);
+            
+            // Load all vehicles and start live updates
+            loadFullMapVehicles();
+            
+            // Start live update interval
+            startFullMapLiveUpdates();
+        }
+        
+        // Load vehicles on full map
+        let fullMapMarkers = {};
+        let fullMapVehicleRoutes = {};
+        let fullMapVehiclePathPolylines = {};
+        
+        function updateVehiclePathOnFullMap(vehicleId, position, color = '#3b82f6') {
+            const routeInfo = getRouteForPosition(position);
+            if (routeInfo && routeInfo.route) {
+                fullMapVehicleRoutes[vehicleId] = routeInfo;
+                const { index: currentIndex } = findNearestPointOnRoute(position, routeInfo.route);
+                const pathCoords = routeInfo.route.slice(0, currentIndex + 1);
+                
+                if (fullMapVehiclePathPolylines[vehicleId]) {
+                    fullMap.removeLayer(fullMapVehiclePathPolylines[vehicleId]);
+                }
+                
+                const pathPolyline = L.polyline(pathCoords, {
+                    color: color,
+                    weight: 4,
+                    opacity: 0.7,
+                    smoothFactor: 1
+                }).bindPopup(`<strong>Vehicle Path</strong><br>Route: ${routeInfo.name.replace('_', ' ').toUpperCase()}`);
+                
+                pathPolyline.addTo(fullMap);
+                fullMapVehiclePathPolylines[vehicleId] = pathPolyline;
+            }
+        }
+        
+        function loadFullMapVehicles() {
+            fetch(`${API_BASE}/api/telemetry/latest`)
+                .then(res => res.json())
+                .then(vehicles => {
+                    vehicles.forEach(v => {
+                        const color = v.speed > 70 ? '#ef4444' : v.speed > 50 ? '#f59e0b' : '#3b82f6';
+                        const icon = L.divIcon({
+                            className: 'custom-marker',
+                            html: `<div style="background:${color};width:28px;height:28px;border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;color:white;font-size:14px;">🚴</div>`,
+                            iconSize: [28, 28]
+                        });
+                        
+                        if (fullMapMarkers[v.vehicle_id]) {
+                            fullMapMarkers[v.vehicle_id].setLatLng([v.latitude, v.longitude]);
+                            fullMapMarkers[v.vehicle_id].setIcon(icon);
+                            fullMapMarkers[v.vehicle_id].getPopup().setContent(`<div class="vehicle-popup-content"><b>${v.plate_number}</b><hr><br>${v.driver_name}<br>${v.speed.toFixed(1)} km/h</div>`);
+                            
+                            // Update vehicle path to follow road routes
+                            // Vehicle path tracking is disabled - only show vehicle markers like Google Maps
+                            // const pathColor = v.speed > 70 ? '#ef4444' : v.speed > 50 ? '#f59e0b' : '#3b82f6';
+                            // updateVehiclePathOnFullMap(v.vehicle_id, [v.latitude, v.longitude], pathColor);
+                        } else {
+                            const marker = L.marker([v.latitude, v.longitude], { icon })
+                                .bindPopup(`<div class="vehicle-popup-content"><b>${v.plate_number}</b><hr><br>${v.driver_name}<br>${v.speed.toFixed(1)} km/h</div>`)
+                                .addTo(fullMap);
+                            fullMapMarkers[v.vehicle_id] = marker;
+                        }
+                    });
+                });
+        }
+        
+        // Start live updates for full map
+        let fullMapUpdateInterval = null;
+        function startFullMapLiveUpdates() {
+            if (fullMapUpdateInterval) clearInterval(fullMapUpdateInterval);
+            
+            // Update every 2 seconds when simulator is running, otherwise every 5 seconds
+            const interval = isSimulatorRunning ? 2000 : 5000;
+            fullMapUpdateInterval = setInterval(() => {
+                loadFullMapVehicles();
+                
+                // If tracking a vehicle, also update the tracked marker
+                if (trackedVehicleId) {
+                    updateTrackedMarker();
+                }
+            }, interval);
+        }
+        
+        // Update tracked marker separately
+        function updateTrackedMarker() {
+            if (!trackedVehicleId || !fullMap) return;
+            
+            fetch(`${API_BASE}/api/telemetry/latest`)
+                .then(res => res.json())
+                .then(vehicles => {
+                    const trackedVehicle = vehicles.find(v => v.vehicle_id === trackedVehicleId);
+                    if (trackedVehicle) {
+                        if (trackedMarker) trackedMarker.remove();
+                        
+                        const trackingIcon = L.divIcon({
+                            className: 'tracking-marker',
+                            html: `<div style="background:#10b981;width:36px;height:36px;border-radius:50%;border:4px solid white;box-shadow:0 4px 15px rgba(16,185,129,0.5);display:flex;align-items:center;justify-content:center;color:white;font-size:16px;"><i class="fas fa-crosshairs"></i></div>`,
+                            iconSize: [36, 36],
+                            iconAnchor: [18, 18]
+                        });
+                        
+                        trackedMarker = L.marker([trackedVehicle.latitude, trackedVehicle.longitude], { icon: trackingIcon })
+                            .bindPopup(`<div class="vehicle-popup-content" style="border-left: 3px solid #10b981;"><b style="color:#10b981;">🎯 Tracking: ${trackedVehicle.plate_number}</b><hr><br>Driver: ${trackedVehicle.driver_name}<br>Speed: ${trackedVehicle.speed.toFixed(1)} km/h</div>`)
+                            .addTo(fullMap);
+                        
+                        fullMap.panTo([trackedVehicle.latitude, trackedVehicle.longitude], { animate: true });
+                    }
+                });
+        }
+        
+        // Chart Functions
+        function updateEventChart(eventSummary) {
+            const ctx = document.getElementById('eventChart').getContext('2d');
+            
+            if (eventChart) eventChart.destroy();
+            
+            eventChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Harsh Braking', 'Rapid Accel', 'Overspeed', 'Idling'],
+                    datasets: [{
+                        data: [
+                            eventSummary.HARSH_BRAKING || 0,
+                            eventSummary.RAPID_ACCELERATION || 0,
+                            eventSummary.OVERSPEED || 0,
+                            eventSummary.IDLING || 0
+                        ],
+                        backgroundColor: ['#ef4444', '#8b5cf6', '#f59e0b', '#6b7280'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { padding: 20, usePointStyle: true }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function updateRiskChart(riskData) {
+            const ctx = document.getElementById('riskChart').getContext('2d');
+            
+            if (riskChart) riskChart.destroy();
+            
+            const topDrivers = riskData.slice(0, 5);
+            
+            riskChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: topDrivers.map(d => d.plate_number || `Driver ${d.driver_id}`),
+                    datasets: [{
+                        label: 'Risk Score',
+                        data: topDrivers.map(d => d.total_score),
+                        backgroundColor: topDrivers.map(s => s.total_score >= 20 ? '#ef4444' : s.total_score >= 10 ? '#f59e0b' : '#22c55e'),
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { beginAtZero: true, grid: { display: false } },
+                        y: { grid: { display: false } }
+                    }
+                }
+            });
+        }
+        
+        function updateAnalyticsPieChart(eventSummary) {
+            const ctx = document.getElementById('analyticsPieChart').getContext('2d');
+            
+            if (analyticsPieChart) analyticsPieChart.destroy();
+            
+            analyticsPieChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: ['Harsh Braking', 'Rapid Accel', 'Overspeed', 'Idling'],
+                    datasets: [{
+                        data: [
+                            eventSummary.HARSH_BRAKING || 0,
+                            eventSummary.RAPID_ACCELERATION || 0,
+                            eventSummary.OVERSPEED || 0,
+                            eventSummary.IDLING || 0
+                        ],
+                        backgroundColor: ['#ef4444', '#8b5cf6', '#f59e0b', '#6b7280'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: { padding: 20, usePointStyle: true }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Add Vehicle Modal Functions
+        function showAddVehicleModal() {
+            document.getElementById('add-vehicle-modal').classList.remove('hidden');
+        }
+        
+        function closeAddVehicleModal() {
+            document.getElementById('add-vehicle-modal').classList.add('hidden');
+            document.getElementById('add-vehicle-form').reset();
+        }
+        
+        // Add Vehicle Form Submit
+        document.getElementById('add-vehicle-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const driverData = {
+                name: document.getElementById('new-driver-name').value,
+                phone: document.getElementById('new-driver-phone').value,
+                license_number: document.getElementById('new-driver-license').value
+            };
+            
+            try {
+                // Create driver first
+                const driverRes = await fetch(`${API_BASE}/api/vehicles/drivers/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(driverData)
+                });
+                
+                if (!driverRes.ok) throw new Error('Failed to create driver');
+                
+                const driver = await driverRes.json();
+                
+                // Create vehicle with driver
+                const vehicleData = {
+                    plate_number: document.getElementById('new-vehicle-plate').value,
+                    model: document.getElementById('new-vehicle-model').value,
+                    driver_id: driver.driver_id,
+                    status: 'active'
+                };
+                
+                const vehicleRes = await fetch(`${API_BASE}/api/vehicles`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(vehicleData)
+                });
+                
+                if (!vehicleRes.ok) throw new Error('Failed to create vehicle');
+                
+                showToast('Vehicle added successfully!', 'success');
+                closeAddVehicleModal();
+                loadVehicles();
+                
+            } catch (error) {
+                console.error('Error adding vehicle:', error);
+                showToast('Failed to add vehicle', 'error');
+            }
+        });
+        
+        // Vehicle Profile Modal
+        async function showVehicleProfile(vehicleId) {
+            try {
+                const [vehicleRes, telemetryRes, riskRes] = await Promise.all([
+                    fetch(`${API_BASE}/api/vehicles/${vehicleId}`),
+                    fetch(`${API_BASE}/api/telemetry/latest`),
+                    fetch(`${API_BASE}/api/events/driver-risk?days=7`)
+                ]);
+                
+                const vehicle = await vehicleRes.json();
+                const telemetry = await telemetryRes.json();
+                const riskData = await riskRes.json();
+                
+                const t = telemetry.find(x => x.vehicle_id === vehicleId);
+                const risk = riskData.find(r => r.driver_id === vehicle.driver?.driver_id);
+                
+                const content = document.getElementById('vehicle-profile-content');
+                content.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="flex items-center gap-4 pb-4 border-b border-gray-100">
+                            <div class="w-16 h-16 bg-gradient-to-br from-blue-400 to-blue-600 rounded-xl flex items-center justify-center text-white text-2xl">
+                                <i class="fas fa-motorcycle"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-xl font-bold text-slate-800">${vehicle.plate_number}</h4>
+                                <p class="text-slate-500">${vehicle.model}</p>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="bg-gray-50 rounded-xl p-3">
+                                <p class="text-xs text-slate-500">Status</p>
+                                <p class="font-semibold text-green-600">${vehicle.status}</p>
+                            </div>
+                            <div class="bg-gray-50 rounded-xl p-3">
+                                <p class="text-xs text-slate-500">Current Speed</p>
+                                <p class="font-semibold">${t ? t.speed.toFixed(1) + ' km/h' : 'N/A'}</p>
+                            </div>
+                            <div class="bg-gray-50 rounded-xl p-3">
+                                <p class="text-xs text-slate-500">Fuel Level</p>
+                                <p class="font-semibold ${t && t.fuel_level < 20 ? 'text-red-500' : ''}">${t ? t.fuel_level.toFixed(1) + '%' : 'N/A'}</p>
+                            </div>
+                            <div class="bg-gray-50 rounded-xl p-3">
+                                <p class="text-xs text-slate-500">Engine Temp</p>
+                                <p class="font-semibold ${t && t.engine_temp > 100 ? 'text-red-500' : ''}">${t ? t.engine_temp.toFixed(1) + '°C' : 'N/A'}</p>
+                            </div>
+                        </div>
+                        
+                        ${vehicle.driver ? `
+                        <div class="pt-4 border-t border-gray-100">
+                            <p class="text-sm font-semibold text-slate-700 mb-2">Assigned Driver</p>
+                            <div class="flex items-center justify-between bg-blue-50 rounded-xl p-3">
+                                <div>
+                                    <p class="font-medium text-slate-800">${vehicle.driver.name}</p>
+                                    <p class="text-sm text-slate-500">${vehicle.driver.phone}</p>
+                                </div>
+                                <button onclick="showDriverProfile(${vehicle.driver.driver_id})" class="text-blue-600 hover:text-blue-800 text-sm">View Profile</button>
+                            </div>
+                        </div>
+                        ` : ''}
+                        
+                        <div class="flex gap-2 pt-4">
+                            <button onclick="trackVehicle(${vehicle.vehicle_id}, '${vehicle.plate_number}', '${vehicle.driver ? vehicle.driver.name : 'N/A'}')" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700">
+                                <i class="fas fa-crosshairs mr-2"></i>Track
+                            </button>
+                            <button onclick="closeVehicleProfileModal()" class="px-4 py-2 border border-gray-200 rounded-xl text-slate-600 hover:bg-gray-50">Close</button>
+                        </div>
+                    </div>
+                `;
+                
+                document.getElementById('vehicle-profile-modal').classList.remove('hidden');
+                
+            } catch (error) {
+                console.error('Error loading vehicle profile:', error);
+                showToast('Failed to load vehicle profile', 'error');
+            }
+        }
+        
+        function closeVehicleProfileModal() {
+            document.getElementById('vehicle-profile-modal').classList.add('hidden');
+        }
+        
+        // Driver Profile Modal
+        async function showDriverProfile(driverId) {
+            if (!driverId || driverId === 0) {
+                showToast('No driver assigned', 'info');
+                return;
+            }
+            
+            try {
+                const [driverRes, riskRes] = await Promise.all([
+                    fetch(`${API_BASE}/api/vehicles/drivers/${driverId}`),
+                    fetch(`${API_BASE}/api/events/driver-risk?days=7`)
+                ]);
+                
+                const driver = await driverRes.json();
+                const riskData = await riskRes.json();
+                
+                const risk = riskData.find(r => r.driver_id === driverId);
+                const riskScore = risk ? risk.total_score : 0;
+                
+                const content = document.getElementById('driver-profile-content');
+                content.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="flex items-center gap-4 pb-4 border-b border-gray-100">
+                            <div class="w-16 h-16 bg-gradient-to-br from-purple-400 to-purple-600 rounded-xl flex items-center justify-center text-white text-2xl">
+                                <i class="fas fa-user"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-xl font-bold text-slate-800">${driver.name}</h4>
+                                <p class="text-slate-500">${driver.phone}</p>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="bg-gray-50 rounded-xl p-3">
+                                <p class="text-xs text-slate-500">License Number</p>
+                                <p class="font-semibold">${driver.license_number || 'N/A'}</p>
+                            </div>
+                            <div class="bg-gray-50 rounded-xl p-3">
+                                <p class="text-xs text-slate-500">Risk Score</p>
+                                <p class="font-bold ${riskScore >= 20 ? 'text-red-500' : riskScore >= 10 ? 'text-amber-500' : 'text-green-500'}">${riskScore}</p>
+                            </div>
+                        </div>
+                        
+                        ${driver.vehicles && driver.vehicles.length > 0 ? `
+                        <div class="pt-4 border-t border-gray-100">
+                            <p class="text-sm font-semibold text-slate-700 mb-2">Assigned Vehicle</p>
+                            <div class="flex items-center justify-between bg-green-50 rounded-xl p-3">
+                                <div>
+                                    <p class="font-medium text-slate-800">${driver.vehicles[0].plate_number}</p>
+                                    <p class="text-sm text-slate-500">${driver.vehicles[0].model}</p>
+                                </div>
+                                <button onclick="showVehicleProfile(${driver.vehicles[0].vehicle_id})" class="text-blue-600 hover:text-blue-800 text-sm">View Vehicle</button>
+                            </div>
+                        </div>
+                        ` : ''}
+                        
+                        <div class="pt-4 border-t border-gray-100">
+                            <p class="text-sm font-semibold text-slate-700 mb-2">Risk Factors</p>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500">Harsh Braking</span>
+                                    <span class="font-medium text-red-500">${risk ? risk.HARSH_BRAKING || 0 : 0} (×3)</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500">Overspeed</span>
+                                    <span class="font-medium text-amber-500">${risk ? risk.OVERSPEED || 0 : 0} (×2)</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500">Rapid Acceleration</span>
+                                    <span class="font-medium text-purple-500">${risk ? risk.RAPID_ACCELERATION || 0 : 0} (×1)</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex gap-2 pt-4">
+                            <button onclick="closeDriverProfileModal(); showVehicleProfile(${driver.vehicles ? driver.vehicles[0].vehicle_id : 0})" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700">
+                                <i class="fas fa-motorcycle mr-2"></i>View Vehicle
+                            </button>
+                            <button onclick="closeDriverProfileModal()" class="px-4 py-2 border border-gray-200 rounded-xl text-slate-600 hover:bg-gray-50">Close</button>
+                        </div>
+                    </div>
+                `;
+                
+                document.getElementById('driver-profile-modal').classList.remove('hidden');
+                
+            } catch (error) {
+                console.error('Error loading driver profile:', error);
+                showToast('Failed to load driver profile', 'error');
+            }
+        }
+        
+        function closeDriverProfileModal() {
+            document.getElementById('driver-profile-modal').classList.add('hidden');
+        }
+        
+        // Notifications
+        let notifications = [];
+        let notificationCount = 0;
+        
+        function toggleNotifications() {
+            // Close sidebar if open on mobile when opening notifications
+            const sidebar = document.getElementById('sidebar');
+            if (window.innerWidth < 1024 && !sidebar.classList.contains('-translate-x-full')) {
+                sidebar.classList.add('-translate-x-full');
+                document.getElementById('sidebar-overlay').classList.add('hidden');
+                document.body.classList.remove('sidebar-open');
+            }
+            
+            const panel = document.getElementById('notifications-panel');
+            if (panel.classList.contains('translate-x-full')) {
+                panel.classList.remove('translate-x-full');
+                loadNotifications();
+            } else {
+                panel.classList.add('translate-x-full');
+            }
+        }
+        
+        function loadNotifications() {
+            const list = document.getElementById('notifications-list');
+            if (notifications.length === 0) {
+                list.innerHTML = '<div class="text-center text-slate-400 py-8">No notifications</div>';
+                return;
+            }
+            
+            list.innerHTML = notifications.map(n => `
+                <div class="p-3 bg-gray-50 rounded-xl ${n.unread ? 'border-l-4 border-blue-500' : ''}">
+                    <div class="flex items-start gap-3">
+                        <div class="w-8 h-8 rounded-full flex items-center justify-center ${n.iconBg}">
+                            <i class="fas ${n.icon} text-white text-sm"></i>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-sm font-medium text-slate-800">${n.title}</p>
+                            <p class="text-xs text-slate-500">${n.message}</p>
+                            <p class="text-xs text-slate-400 mt-1">${n.time}</p>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function addNotification(title, message, type = 'info') {
+            const icons = {
+                success: { icon: 'fa-check', bg: 'bg-green-500' },
+                error: { icon: 'fa-exclamation', bg: 'bg-red-500' },
+                warning: { icon: 'fa-exclamation-triangle', bg: 'bg-amber-500' },
+                info: { icon: 'fa-info', bg: 'bg-blue-500' }
+            };
+            
+            const iconData = icons[type] || icons.info;
+            
+            notifications.unshift({
+                title,
+                message,
+                type,
+                icon: iconData.icon,
+                iconBg: iconData.bg,
+                time: new Date().toLocaleTimeString(),
+                unread: true
+            });
+            
+            // Keep only last 20 notifications
+            if (notifications.length > 20) {
+                notifications = notifications.slice(0, 20);
+            }
+            
+            // Update badge
+            notificationCount++;
+            const badge = document.querySelector('.notification-badge');
+            if (badge) {
+                badge.textContent = notificationCount;
+                badge.classList.remove('hidden');
+            }
+            
+            // Reload if panel is open
+            if (!document.getElementById('notifications-panel').classList.contains('translate-x-full')) {
+                loadNotifications();
+            }
+        }
+        
+        // Check for new events and add notifications
+        async function checkForNewEvents() {
+            try {
+                const response = await fetch(`${API_BASE}/api/events?hours=1&limit=5`);
+                const events = await response.json();
+                
+                if (events.length > 0) {
+                    const latestEvent = events[0];
+                    const typeLabels = {
+                        'HARSH_BRAKING': 'Harsh Braking',
+                        'OVERSPEED': 'Overspeed',
+                        'RAPID_ACCELERATION': 'Rapid Acceleration',
+                        'IDLING': 'Idling'
+                    };
+                    
+                    const type = latestEvent.event_type;
+                    const notifType = type === 'HARSH_BRAKING' || type === 'OVERSPEED' ? 'warning' : 'info';
+                    
+                    addNotification(
+                        typeLabels[type] || type,
+                        `${latestEvent.plate_number} - ${latestEvent.speed ? latestEvent.speed.toFixed(1) + ' km/h' : ''}`,
+                        notifType
+                    );
+                }
+            } catch (error) {
+                // Silent fail for notifications
+            }
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initDashboardMap();
+            loadDashboardData();
+            
+            // Set up normal dashboard refresh (10 seconds)
+            setupDashboardRefresh(false);
+        });
+    </script>
+</body>
+</html>
