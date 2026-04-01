@@ -42,7 +42,13 @@ class OSMService:
 
     def __init__(self, cache_dir: str = "data/osm_cache"):
         self.cache_dir = Path(cache_dir)
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+        except (OSError, PermissionError):
+            # Read-only file system (e.g., Vercel serverless)
+            logger.warning(f"Cannot create cache directory {cache_dir} - running in read-only mode")
+            self.cache_dir = None
+
         self.graph = None
         self.nodes_df = None
         self.edges_df = None
