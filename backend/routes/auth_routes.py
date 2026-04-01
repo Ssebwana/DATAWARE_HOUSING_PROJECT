@@ -353,11 +353,5 @@ def reset_password(request: PasswordResetVerify, db: Session = Depends(get_db)):
     return {"message": "Password reset successfully"}
 
 
-@router.on_event("startup")
-async def startup_event():
-    """Initialize default users on startup"""
-    db = SessionLocal()
-    try:
-        init_default_users(db)
-    finally:
-        db.close()
+# Note: Router startup events are not supported.
+# Default users are initialized in backend/main.py startup event.
