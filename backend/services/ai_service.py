@@ -5,13 +5,47 @@ Integrates ST-GNN models and explainable AI with FastAPI backend
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import json
-import pandas as pd
-import numpy as np
 from fastapi import HTTPException
 
-from ai_models.st_gnn_model import STGNNPredictor, STGNNConfig
-from ai_models.explainable_ai import ExplainableAIController
-from evaluation.evaluation_framework import ModelEvaluator, SystemBenchmarker
+# Try to import optional dependencies
+try:
+    import pandas as pd
+    PANDAS_AVAILABLE = True
+except ImportError:
+    pd = None
+    PANDAS_AVAILABLE = False
+
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    np = None
+    NUMPY_AVAILABLE = False
+
+# Try to import AI models (may not be available in serverless)
+try:
+    from ai_models.st_gnn_model import STGNNPredictor, STGNNConfig
+    AI_MODELS_AVAILABLE = True
+except ImportError:
+    STGNNPredictor = None
+    STGNNConfig = None
+    AI_MODELS_AVAILABLE = False
+
+try:
+    from ai_models.explainable_ai import ExplainableAIController
+    EXPLAINABLE_AI_AVAILABLE = True
+except ImportError:
+    ExplainableAIController = None
+    EXPLAINABLE_AI_AVAILABLE = False
+
+try:
+    from evaluation.evaluation_framework import ModelEvaluator, SystemBenchmarker
+    EVALUATION_AVAILABLE = True
+except ImportError:
+    ModelEvaluator = None
+    SystemBenchmarker = None
+    EVALUATION_AVAILABLE = False
+
 from backend.database import get_db
 from sqlalchemy.orm import Session
 
@@ -21,10 +55,35 @@ class AIService:
 
     def __init__(self):
         self.stgnn_predictor = None  # Will be initialized with trained model
-        self.explainable_ai = ExplainableAIController()
-        self.evaluator = ModelEvaluator()
-        self.benchmarker = SystemBenchmarker()
-        self.model_config = STGNNConfig()
+        self.explainable_ai = None
+        self.evaluator = None
+        self.benchmarker = None
+        self.model_config = None
+
+        # Initialize available components
+        if EXPLAINABLE_AI_AVAILABLE:
+            try:
+                self.explainable_ai = ExplainableAIController()
+            except Exception as e:
+                print(f"Warning: Could not initialize ExplainableAI: {e}")
+
+        if EVALUATION_AVAILABLE:
+            try:
+                self.evaluator = ModelEvaluator()
+            except Exception as e:
+                print(f"Warning: Could not initialize ModelEvaluator: {e}")
+
+        if EVALUATION_AVAILABLE:
+            try:
+                self.benchmarker = SystemBenchmarker()
+            except Exception as e:
+                print(f"Warning: Could not initialize SystemBenchmarker: {e}")
+
+        if AI_MODELS_AVAILABLE:
+            try:
+                self.model_config = STGNNConfig()
+            except Exception as e:
+                print(f"Warning: Could not initialize STGNNConfig: {e}")
 
     def initialize_models(self, model_path: str = None):
         """Initialize AI models"""
@@ -65,6 +124,13 @@ class AIService:
 
     async def explain_anomaly(self, anomaly_data: Dict[str, Any]) -> Dict[str, Any]:
         """Generate explanation for anomaly"""
+        if not self.explainable_ai:
+            return {
+                "explanation": "Rule-based explanation: Anomaly detected based on threshold analysis",
+                "confidence": 0.7,
+                "causal_factors": ["threshold_violation"]
+            }
+
         try:
             explanation = self.explainable_ai.explain_anomaly(anomaly_data)
             return explanation
@@ -74,6 +140,9 @@ class AIService:
 
     async def get_evidence_based_insights(self, data_summary: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Generate evidence-based insights"""
+        if not self.explainable_ai or not hasattr(self.explainable_ai, 'decision_support'):
+            return [{"insight": "Basic insight: Monitor your fleet regularly", "confidence": 0.5}]
+
         try:
             insights = self.explainable_ai.decision_support.generate_insights(data_summary)
             return [insight.to_dict() for insight in insights]
@@ -81,8 +150,7 @@ class AIService:
         except Exception as e:
             return [{"error": f"Insight generation failed: {str(e)}"}]
 
-    async def evaluate_model(self, test_data: pd.DataFrame,
-                           test_labels: np.ndarray, model_name: str = "current_model") -> Dict[str, Any]:
+    async def evaluate_model(self, test_data=None, test_labels=None, model_name: str = "current_model") -> Dict[str, Any]:
         """Evaluate model performance"""
         try:
             # This would normally evaluate against real test data
@@ -109,6 +177,12 @@ class AIService:
 
     async def benchmark_system(self, duration_seconds: int = 60) -> Dict[str, Any]:
         """Benchmark system performance"""
+        if not self.benchmarker:
+            return {
+                "status": "benchmarking_unavailable",
+                "message": "Benchmarking not available in this environment"
+            }
+
         try:
             benchmark_results = self.benchmarker.run_load_test(
                 test_scenario="ai_inference_load_test",
@@ -123,20 +197,23 @@ class AIService:
         """Get status of AI models"""
         status = {
             "stgnn_available": self.stgnn_predictor is not None,
-            "explainable_ai_available": True,  # Always available (rule-based fallback)
-            "evaluation_framework_available": True,
-            "benchmarking_available": True,
-            "model_config": {
-                "node_features": self.model_config.node_features,
-                "hidden_dim": self.model_config.hidden_dim,
-                "sequence_length": self.model_config.sequence_length,
-                "prediction_horizon": self.model_config.prediction_horizon
-            }
+            "explainable_ai_available": self.explainable_ai is not None,
+            "evaluation_framework_available": self.evaluator is not None,
+            "benchmarking_available": self.benchmarker is not None,
+            "model_config": {}
         }
+
+        if self.model_config:
+            status["model_config"] = {
+                "node_features": getattr(self.model_config, 'node_features', 16),
+                "hidden_dim": getattr(self.model_config, 'hidden_dim', 64),
+                "sequence_length": getattr(self.model_config, 'sequence_length', 10),
+                "prediction_horizon": getattr(self.model_config, 'prediction_horizon', 5)
+            }
 
         if self.stgnn_predictor:
             status["model_info"] = {
-                "anomaly_threshold": self.model_config.anomaly_threshold,
+                "anomaly_threshold": getattr(self.model_config, 'anomaly_threshold', 0.5) if self.model_config else 0.5,
                 "supported_features": ["speed", "acceleration", "location", "time_features"]
             }
 
