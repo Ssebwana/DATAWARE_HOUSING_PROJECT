@@ -1,28 +1,32 @@
 """
-MakFleet Backend - Vercel Serverless Version
-Simplified version for Vercel deployment with only essential functionality
-Note: Uses in-memory storage since Vercel serverless doesn't persist files
+MakFleet Backend - Vercel Serverless Version with Supabase
+Persistent user storage using Supabase PostgreSQL
 """
 import os
 import sys
+import hashlib
+import json
+import base64
+from datetime import datetime, timedelta
+from typing import Optional, Dict
 
 # Add backend to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from datetime import datetime, timedelta
-from typing import Optional, Dict
-import hashlib
-import json
 
 # Configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "makfleet-secret-key-change-in-production-2026")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
+
+# Supabase Configuration
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 # Simple password hashing
 def hash_password(password: str) -> str:
@@ -37,7 +41,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 # Simple token implementation
 def create_access_token(data: dict) -> str:
     """Create a simple token (base64 encoded JSON)"""
-    import base64
     data["exp"] = (datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)).isoformat()
     token = base64.b64encode(json.dumps(data).encode()).decode()
     return token
@@ -45,7 +48,6 @@ def create_access_token(data: dict) -> str:
 def decode_token(token: str) -> Optional[dict]:
     """Decode a simple token"""
     try:
-        import base64
         data = json.loads(base64.b64decode(token).decode())
         if datetime.fromisoformat(data["exp"]) < datetime.utcnow():
             return None
@@ -53,9 +55,25 @@ def decode_token(token: str) -> Optional[dict]:
     except:
         return None
 
-# In-memory user storage (for demo - use real DB in production)
-# In a real app, you'd use PostgreSQL, MongoDB, or similar
-users_db: Dict[str, dict] = {
+# Supabase Client Setup
+def get_supabase_client():
+    """Get Supabase client with error handling"""
+    try:
+        from supabase import create_client, Client
+        if not SUPABASE_URL or not SUPABASE_KEY:
+            return None
+        return create_client(SUPABASE_URL, SUPABASE_KEY)
+    except ImportError:
+        return None
+    except Exception as e:
+        print(f"Error creating Supabase client: {e}")
+        return None
+
+# Initialize Supabase client
+supabase = get_supabase_client()
+
+# Fallback in-memory storage if Supabase is not available
+fallback_users: Dict[str, dict] = {
     "admin": {
         "id": 1,
         "username": "admin",
@@ -75,6 +93,51 @@ users_db: Dict[str, dict] = {
         "is_active": True
     }
 }
+
+def init_database():
+    """Initialize database with default users if using Supabase"""
+    if not supabase:
+        print("Supabase not configured, using fallback in-memory storage")
+        return
+    
+    try:
+        # Check if users table exists
+        response = supabase.table("users").select("id").limit(1).execute()
+        
+        # If table is empty, insert default users
+        if not response.data:
+            default_users = [
+                {
+                    "username": "admin",
+                    "email": "admin@makfleet.ac.ug",
+                    "hashed_password": hash_password("admin123"),
+                    "full_name": "System Administrator",
+                    "role": "admin",
+                    "is_active": True
+                },
+                {
+                    "username": "driver",
+                    "email": "driver@makfleet.ac.ug",
+                    "hashed_password": hash_password("driver123"),
+                    "full_name": "Demo Driver",
+                    "role": "driver",
+                    "is_active": True,
+                    "driver_license": "UGA-DL-001234"
+                }
+            ]
+            
+            for user in default_users:
+                try:
+                    supabase.table("users").insert(user).execute()
+                    print(f"Created default user: {user['username']}")
+                except Exception as e:
+                    if "duplicate" not in str(e).lower():
+                        print(f"Error creating user {user['username']}: {e}")
+    except Exception as e:
+        print(f"Error initializing database: {e}")
+
+# Initialize database on startup
+init_database()
 
 # Pydantic models
 class UserLogin(BaseModel):
@@ -101,6 +164,62 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Helper functions for database operations
+def get_user(username: str) -> Optional[dict]:
+    """Get user from database or fallback"""
+    if supabase:
+        try:
+            response = supabase.table("users").select("*").eq("username", username).eq("is_active", True).execute()
+            if response.data:
+                return response.data[0]
+        except Exception as e:
+            print(f"Error fetching user: {e}")
+    return fallback_users.get(username)
+
+def create_user(user_data: UserCreate) -> Optional[dict]:
+    """Create new user in database or fallback"""
+    if supabase:
+        try:
+            response = supabase.table("users").insert({
+                "username": user_data.username,
+                "email": user_data.email,
+                "hashed_password": hash_password(user_data.password),
+                "full_name": user_data.full_name,
+                "role": user_data.role,
+                "driver_license": user_data.driver_license,
+                "is_active": True
+            }).execute()
+            if response.data:
+                return response.data[0]
+        except Exception as e:
+            print(f"Error creating user: {e}")
+            return None
+    else:
+        # Fallback to in-memory
+        new_id = max(u["id"] for u in fallback_users.values()) + 1
+        new_user = {
+            "id": new_id,
+            "username": user_data.username,
+            "email": user_data.email,
+            "hashed_password": hash_password(user_data.password),
+            "full_name": user_data.full_name,
+            "role": user_data.role,
+            "is_active": True
+        }
+        fallback_users[user_data.username] = new_user
+        return new_user
+    return None
+
+def check_user_exists(username: str, email: str) -> bool:
+    """Check if username or email already exists"""
+    if supabase:
+        try:
+            response = supabase.table("users").select("id").or_(f"username.eq.{username},email.eq.{email}").execute()
+            return len(response.data) > 0
+        except:
+            pass
+    return username in fallback_users or any(u["email"] == email for u in fallback_users.values())
+
 # Routes
 @app.get("/")
 def root():
@@ -125,9 +244,9 @@ def dashboard_page():
 @app.post("/api/auth/login")
 def login(user_data: UserLogin):
     """Authenticate user and return token"""
-    user = users_db.get(user_data.username)
+    user = get_user(user_data.username)
     
-    if not user or not user["is_active"]:
+    if not user or not user.get("is_active", False):
         raise HTTPException(
             status_code=401,
             detail="Incorrect username or password"
@@ -138,6 +257,13 @@ def login(user_data: UserLogin):
             status_code=401,
             detail="Incorrect username or password"
         )
+    
+    # Update last login if using Supabase
+    if supabase:
+        try:
+            supabase.table("users").update({"last_login": datetime.utcnow().isoformat()}).eq("username", user_data.username).execute()
+        except:
+            pass
     
     # Create token
     access_token = create_access_token({
@@ -154,7 +280,7 @@ def login(user_data: UserLogin):
             "email": user["email"],
             "full_name": user["full_name"],
             "role": user["role"],
-            "is_active": user["is_active"]
+            "is_active": user.get("is_active", False)
         }
     }
 
@@ -162,33 +288,19 @@ def login(user_data: UserLogin):
 def register(user_data: UserCreate):
     """Register a new user"""
     # Check if user exists
-    if user_data.username in users_db:
+    if check_user_exists(user_data.username, user_data.email):
         raise HTTPException(
             status_code=400,
-            detail="Username already registered"
+            detail="Username or email already registered"
         )
     
-    # Check if email is used
-    for u in users_db.values():
-        if u["email"] == user_data.email:
-            raise HTTPException(
-                status_code=400,
-                detail="Email already registered"
-            )
-    
-    # Create new user
-    new_id = max(u["id"] for u in users_db.values()) + 1
-    new_user = {
-        "id": new_id,
-        "username": user_data.username,
-        "email": user_data.email,
-        "hashed_password": hash_password(user_data.password),
-        "full_name": user_data.full_name,
-        "role": user_data.role,
-        "is_active": True
-    }
-    
-    users_db[user_data.username] = new_user
+    # Create user
+    new_user = create_user(user_data)
+    if not new_user:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create user"
+        )
     
     # Create token
     access_token = create_access_token({
@@ -216,7 +328,7 @@ def get_profile(token: str):
     if not data:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
     
-    user = users_db.get(data["sub"])
+    user = get_user(data["sub"])
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
@@ -226,7 +338,7 @@ def get_profile(token: str):
         "email": user["email"],
         "full_name": user["full_name"],
         "role": user["role"],
-        "is_active": user["is_active"]
+        "is_active": user.get("is_active", False)
     }
 
 # Static files
