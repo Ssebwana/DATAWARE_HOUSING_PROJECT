@@ -6,7 +6,14 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
 from enum import Enum
-import numpy as np
+
+# Try to import numpy, but make it optional for serverless deployment
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    np = None
+    NUMPY_AVAILABLE = False
 
 
 class EventType(Enum):
@@ -64,8 +71,10 @@ class GPSPoint:
             return False
         return True
     
-    def to_numpy(self) -> np.ndarray:
+    def to_numpy(self):
         """Convert to numpy array for ML processing"""
+        if not NUMPY_AVAILABLE:
+            return [self.latitude, self.longitude, self.timestamp.timestamp()]
         return np.array([self.latitude, self.longitude, self.timestamp.timestamp()])
 
 
@@ -105,17 +114,32 @@ class Trajectory:
         speeds = [p.speed for p in self.points]
         accelerations = [p.acceleration for p in self.points]
         
-        return {
-            'avg_speed': np.mean(speeds),
-            'speed_std': np.std(speeds),
-            'max_speed': np.max(speeds),
-            'avg_acceleration': np.mean(accelerations),
-            'acceleration_std': np.std(accelerations),
-            'harsh_braking_count': sum(1 for a in accelerations if a < -4.0),
-            'rapid_accel_count': sum(1 for a in accelerations if a > 4.0),
-            'duration_seconds': (self.end_time - self.start_time).total_seconds(),
-            'point_count': len(self.points)
-        }
+        # Use numpy if available, otherwise use basic Python
+        if NUMPY_AVAILABLE:
+            return {
+                'avg_speed': float(np.mean(speeds)),
+                'speed_std': float(np.std(speeds)),
+                'max_speed': float(np.max(speeds)),
+                'avg_acceleration': float(np.mean(accelerations)),
+                'acceleration_std': float(np.std(accelerations)),
+                'harsh_braking_count': sum(1 for a in accelerations if a < -4.0),
+                'rapid_accel_count': sum(1 for a in accelerations if a > 4.0),
+                'duration_seconds': (self.end_time - self.start_time).total_seconds(),
+                'point_count': len(self.points)
+            }
+        else:
+            # Basic Python fallback
+            return {
+                'avg_speed': sum(speeds) / len(speeds),
+                'speed_std': (sum((s - sum(speeds)/len(speeds))**2 for s in speeds) / len(speeds)) ** 0.5,
+                'max_speed': max(speeds),
+                'avg_acceleration': sum(accelerations) / len(accelerations),
+                'acceleration_std': (sum((a - sum(accelerations)/len(accelerations))**2 for a in accelerations) / len(accelerations)) ** 0.5,
+                'harsh_braking_count': sum(1 for a in accelerations if a < -4.0),
+                'rapid_accel_count': sum(1 for a in accelerations if a > 4.0),
+                'duration_seconds': (self.end_time - self.start_time).total_seconds(),
+                'point_count': len(self.points)
+            }
 
 
 @dataclass
