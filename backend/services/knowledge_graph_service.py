@@ -5,7 +5,15 @@ Integrates Neo4j graph database with spatio-temporal relationships
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import json
-from neo4j import GraphDatabase
+
+# Try to import neo4j, but make it optional for serverless deployment
+try:
+    from neo4j import GraphDatabase
+    NEO4J_AVAILABLE = True
+except ImportError:
+    GraphDatabase = None
+    NEO4J_AVAILABLE = False
+
 from backend.models.spatio_temporal_models import CampusLocation, ZoneType
 
 
@@ -14,6 +22,12 @@ class KnowledgeGraphService:
 
     def __init__(self, uri: str = "bolt://localhost:7687",
                  user: str = "neo4j", password: str = "password"):
+        self.driver = None
+
+        if not NEO4J_AVAILABLE:
+            print("Warning: Neo4j module not available - knowledge graph features disabled")
+            return
+
         try:
             self.driver = GraphDatabase.driver(uri, auth=(user, password))
             self._initialize_schema()
