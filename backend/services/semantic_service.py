@@ -7,9 +7,18 @@ from datetime import datetime
 from fastapi import HTTPException
 import json
 
-from data_pipeline.semantic_pipeline import (
-    SemanticDataPipeline, MapMatcher, GPSNoiseHandler
-)
+# Try to import semantic pipeline, but make it optional for serverless
+try:
+    from data_pipeline.semantic_pipeline import (
+        SemanticDataPipeline, MapMatcher, GPSNoiseHandler
+    )
+    SEMANTIC_PIPELINE_AVAILABLE = True
+except ImportError:
+    SemanticDataPipeline = None
+    MapMatcher = None
+    GPSNoiseHandler = None
+    SEMANTIC_PIPELINE_AVAILABLE = False
+
 from backend.models.spatio_temporal_models import CampusLocation, ZoneType
 from backend.database import get_db
 from sqlalchemy.orm import Session
@@ -21,9 +30,17 @@ class SemanticDataService:
     def __init__(self):
         # Initialize campus locations (would be loaded from database in production)
         self.campus_locations = self._load_campus_locations()
-        self.pipeline = SemanticDataPipeline(self.campus_locations)
-        self.map_matcher = MapMatcher(self.campus_locations)
-        self.gps_handler = GPSNoiseHandler()
+        self.pipeline = None
+        self.map_matcher = None
+        self.gps_handler = None
+
+        if SEMANTIC_PIPELINE_AVAILABLE:
+            try:
+                self.pipeline = SemanticDataPipeline(self.campus_locations)
+                self.map_matcher = MapMatcher(self.campus_locations)
+                self.gps_handler = GPSNoiseHandler()
+            except Exception as e:
+                print(f"Warning: Could not initialize semantic pipeline: {e}")
 
     def _load_campus_locations(self) -> List[CampusLocation]:
         """Load campus locations from database"""
