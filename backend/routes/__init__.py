@@ -7,3 +7,4 @@ from . import ai_routes
 from . import privacy_routes
 from . import knowledge_graph_routes
 from . import auth_routes
+from . import user_routes
