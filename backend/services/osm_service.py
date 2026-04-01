@@ -3,17 +3,34 @@ OpenStreetMap Service for MakFleet
 Provides spatial backbone using real Makerere University campus data
 """
 
-import osmnx as ox
-import networkx as nx
-import geopandas as gpd
-import pandas as pd
-import numpy as np
+# Try to import optional dependencies for serverless deployment
+try:
+    import osmnx as ox
+    import networkx as nx
+    import geopandas as gpd
+    import numpy as np
+    OSM_AVAILABLE = True
+except ImportError:
+    ox = None
+    nx = None
+    gpd = None
+    np = None
+    OSM_AVAILABLE = False
+
 from typing import Dict, List, Tuple, Optional
 import json
 import os
 from pathlib import Path
 import pickle
 import logging
+
+# pandas is needed for basic operations, try to import
+try:
+    import pandas as pd
+    PANDAS_AVAILABLE = True
+except ImportError:
+    pd = None
+    PANDAS_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +47,10 @@ class OSMService:
         self.nodes_df = None
         self.edges_df = None
         self.buildings_df = None
+
+        if not OSM_AVAILABLE:
+            logger.warning("OSMnx module not available - OSM features disabled")
+            return
 
         # Configure OSMnx
         ox.settings.use_cache = True
