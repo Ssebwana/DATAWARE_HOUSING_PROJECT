@@ -6,15 +6,11 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status, Request
+from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 import os
-
-from .database import SessionLocal
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
-from .base import Base
 
 # JWT Configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "makfleet-secret-key-change-in-production-2026")
@@ -28,25 +24,7 @@ pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
 
-class User(Base):
-    """User model for authentication"""
-    __tablename__ = "users"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(50), unique=True, nullable=False, index=True)
-    email = Column(String(100), unique=True, nullable=False)
-    hashed_password = Column(String(256), nullable=False)
-    full_name = Column(String(100), nullable=False)
-    role = Column(String(20), nullable=False)  # 'admin' or 'driver'
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    last_login = Column(DateTime, nullable=True)
-    
-    # Driver-specific fields (nullable for admin users)
-    driver_license = Column(String(50), nullable=True)
-    assigned_vehicle_id = Column(Integer, nullable=True)  # ForeignKey to vehicles
-
-
+# Pydantic models (no database dependency)
 class Token(BaseModel):
     """JWT Token response model"""
     access_token: str
@@ -88,18 +66,79 @@ class PasswordResetVerify(BaseModel):
     new_password: str
 
 
-class PasswordResetCode(Base):
-    """Password reset code model"""
-    __tablename__ = "password_reset_codes"
+# Lazy imports to avoid circular dependencies
+def _get_base():
+    """Lazy import of Base to avoid circular imports"""
+    from .base import Base
+    return Base
+
+
+def _get_SessionLocal():
+    """Lazy import of SessionLocal to avoid circular imports"""
+    from .database import SessionLocal
+    return SessionLocal
+
+
+def _get_User_model():
+    """Lazy import of User model to avoid circular imports"""
+    from .base import Base
+    from sqlalchemy import Column, Integer, String, Boolean, DateTime
     
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String(100), nullable=False, index=True)
-    code = Column(String(6), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    expires_at = Column(DateTime, nullable=False)
-    is_used = Column(Boolean, default=False)
+    # Check if User is already defined in Base
+    if hasattr(Base.registry, 'classes'):
+        for cls in Base.registry.classes:
+            if getattr(cls, '__tablename__', None) == 'users':
+                return cls
+    
+    # Define User model
+    class User(Base):
+        """User model for authentication"""
+        __tablename__ = "users"
+        
+        id = Column(Integer, primary_key=True, index=True)
+        username = Column(String(50), unique=True, nullable=False, index=True)
+        email = Column(String(100), unique=True, nullable=False)
+        hashed_password = Column(String(256), nullable=False)
+        full_name = Column(String(100), nullable=False)
+        role = Column(String(20), nullable=False)  # 'admin' or 'driver'
+        is_active = Column(Boolean, default=True)
+        created_at = Column(DateTime, default=datetime.utcnow)
+        last_login = Column(DateTime, nullable=True)
+        
+        # Driver-specific fields (nullable for admin users)
+        driver_license = Column(String(50), nullable=True)
+        assigned_vehicle_id = Column(Integer, nullable=True)
+    
+    return User
 
 
+def _get_PasswordResetCode_model():
+    """Lazy import of PasswordResetCode model to avoid circular imports"""
+    from .base import Base
+    from sqlalchemy import Column, Integer, String, Boolean, DateTime
+    
+    # Check if PasswordResetCode is already defined in Base
+    if hasattr(Base.registry, 'classes'):
+        for cls in Base.registry.classes:
+            if getattr(cls, '__tablename__', None) == 'password_reset_codes':
+                return cls
+    
+    # Define PasswordResetCode model
+    class PasswordResetCode(Base):
+        """Password reset code model"""
+        __tablename__ = "password_reset_codes"
+        
+        id = Column(Integer, primary_key=True, index=True)
+        email = Column(String(100), nullable=False, index=True)
+        code = Column(String(6), nullable=False)
+        created_at = Column(DateTime, default=datetime.utcnow)
+        expires_at = Column(DateTime, nullable=False)
+        is_used = Column(Boolean, default=False)
+    
+    return PasswordResetCode
+
+
+# Functions that need database
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a plain password against a hashed password"""
     return pwd_context.verify(plain_password, hashed_password)
@@ -125,6 +164,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 def authenticate_user(db: Session, username: str, password: str):
     """Authenticate a user by username and password"""
+    User = _get_User_model()
     user = db.query(User).filter(User.username == username).first()
     if not user:
         return False
@@ -133,10 +173,20 @@ def authenticate_user(db: Session, username: str, password: str):
     return user
 
 
+def get_db():
+    """Get database session"""
+    SessionLocal = _get_SessionLocal()
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 def get_current_user(
     token: Optional[str] = Depends(oauth2_scheme),
-    db: Session = Depends(lambda: SessionLocal())
-) -> Optional[User]:
+    db: Session = Depends(get_db)
+) -> Optional[object]:
     """Get the current user from JWT token"""
     if token is None:
         return None
@@ -157,6 +207,7 @@ def get_current_user(
     except JWTError:
         raise credentials_exception
     
+    User = _get_User_model()
     user = db.query(User).filter(User.username == token_data.username).first()
     if user is None:
         raise credentials_exception
@@ -167,7 +218,7 @@ def get_current_user(
 def require_role(required_role: str):
     """Dependency to require a specific role"""
     async def role_checker(
-        current_user: User = Depends(get_current_user)
+        current_user = Depends(get_current_user)
     ):
         if current_user is None:
             raise HTTPException(
@@ -186,6 +237,9 @@ def require_role(required_role: str):
 
 def init_default_users(db: Session):
     """Initialize default users if they don't exist"""
+    Base = _get_base()
+    User = _get_User_model()
+    
     # Create the users table if it doesn't exist
     try:
         Base.metadata.create_all(db.get_bind(), tables=[User.__table__])
@@ -223,12 +277,3 @@ def init_default_users(db: Session):
         print("Created default driver user (username: driver, password: driver123)")
     
     db.commit()
-
-
-def get_db():
-    """Get database session"""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
