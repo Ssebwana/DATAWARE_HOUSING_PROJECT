@@ -8,7 +8,7 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 
 from ..database import get_db
-from ..models import Event, Vehicle, Driver
+from backend.models import Event, Vehicle, Driver
 from ..services.analytics import AnalyticsService
 
 

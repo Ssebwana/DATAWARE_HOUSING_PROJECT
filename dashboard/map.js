@@ -162,12 +162,13 @@ function initMap() {
     const center = [0.3336, 32.5671];
     
     // Create map instance
-    map = L.map('map').setView(center, 16);
+    map = L.map('campus-map').setView(center, 16);
     
-    // Add OpenStreetMap tile layer
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 19
+    // Add Stamen Toner tiles for Google Maps-like clean appearance
+    L.tileLayer('http://stamen-tiles-{s}.a.ssl.fastly.net/toner/{z}/{x}/{y}.png', {
+        attribution: 'Map tiles by <a href="http://stamen.com">Stamen Design</a>, <a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a> — Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        subdomains: 'a,b,c,d',
+        maxZoom: 18
     }).addTo(map);
     
     // Add campus landmarks

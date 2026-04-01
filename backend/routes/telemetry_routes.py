@@ -51,7 +51,7 @@ def add_telemetry(
 ):
     """
     Ingest telemetry data from IoT devices
-    
+
     This endpoint receives raw telemetry data from GPS/sensors,
     stores it in the database, and triggers event detection.
     """
@@ -62,10 +62,10 @@ def add_telemetry(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Vehicle with ID {data.vehicle_id} not found"
         )
-    
+
     # Use current timestamp if not provided
     timestamp = data.timestamp or datetime.utcnow()
-    
+
     # Create telemetry record
     telemetry = Telemetry(
         vehicle_id=data.vehicle_id,
@@ -77,17 +77,17 @@ def add_telemetry(
         fuel_level=data.fuel_level,
         timestamp=timestamp
     )
-    
+
     db.add(telemetry)
     db.commit()
     db.refresh(telemetry)
-    
+
     # Detect events from this telemetry data
     event_type, severity = EventDetectionService.detect_event(
         speed=data.speed,
         acceleration=data.acceleration
     )
-    
+
     if event_type:
         from ..models import Event
         event = Event(
@@ -102,7 +102,7 @@ def add_telemetry(
         )
         db.add(event)
         db.commit()
-    
+
     return {
         "status": "stored",
         "telemetry_id": telemetry.telemetry_id,
@@ -149,34 +149,59 @@ def get_latest_telemetry(
     """
     Get the latest telemetry reading for each vehicle
     """
-    # Get all telemetry ordered by vehicle and timestamp
-    telemetry = db.query(Telemetry).order_by(
-        Telemetry.vehicle_id, Telemetry.timestamp.desc()
+    # Use subquery to get latest timestamp per vehicle
+    from sqlalchemy import func
+
+    # Subquery to get max timestamp per vehicle
+    subquery = db.query(
+        Telemetry.vehicle_id,
+        func.max(Telemetry.timestamp).label('max_timestamp')
+    ).group_by(Telemetry.vehicle_id).subquery()
+
+    # Join with telemetry to get the full records
+    telemetry = db.query(Telemetry).join(
+        subquery,
+        (Telemetry.vehicle_id == subquery.c.vehicle_id) &
+        (Telemetry.timestamp == subquery.c.max_timestamp)
     ).all()
-    
-    # Get latest per vehicle
-    latest_by_vehicle = {}
+
+    # Format results
+    results = []
     for t in telemetry:
-        if t.vehicle_id not in latest_by_vehicle:
-            # Get vehicle info
-            vehicle = db.query(Vehicle).filter(Vehicle.vehicle_id == t.vehicle_id).first()
-            driver_name = "Unknown"
-            if vehicle and vehicle.driver_id:
-                driver = db.query(Driver).filter(Driver.driver_id == vehicle.driver_id).first()
-                if driver:
-                    driver_name = driver.name
-            
-            latest_by_vehicle[t.vehicle_id] = {
-                "vehicle_id": t.vehicle_id,
-                "plate_number": vehicle.plate_number if vehicle else "Unknown",
-                "driver_name": driver_name,
-                "latitude": t.latitude,
-                "longitude": t.longitude,
-                "speed": t.speed,
-                "acceleration": t.acceleration,
-                "engine_temp": t.engine_temp,
-                "fuel_level": t.fuel_level,
-                "timestamp": t.timestamp.isoformat() if t.timestamp else None
-            }
-    
-    return list(latest_by_vehicle.values())
+        # Get vehicle info
+        vehicle = db.query(Vehicle).filter(Vehicle.vehicle_id == t.vehicle_id).first()
+        driver_name = "Unknown"
+        if vehicle and vehicle.driver_id:
+            driver = db.query(Driver).filter(Driver.driver_id == vehicle.driver_id).first()
+            if driver:
+                driver_name = driver.name
+
+        results.append({
+            "vehicle_id": t.vehicle_id,
+            "plate_number": vehicle.plate_number if vehicle else "Unknown",
+            "driver_name": driver_name,
+            "latitude": t.latitude,
+            "longitude": t.longitude,
+            "speed": t.speed,
+            "acceleration": t.acceleration,
+            "engine_temp": t.engine_temp,
+            "fuel_level": t.fuel_level,
+            "timestamp": t.timestamp.isoformat() if t.timestamp else None
+        })
+
+    return results
+
+
+@router.get("/daily-summary")
+def get_daily_summary(
+    days: int = 7,
+    db: Session = Depends(get_db)
+):
+    """
+    Get a summary of daily trips, including the number of active vehicles
+    and total telemetry readings per day.
+
+    Args:
+        days: Number of days to look back for the summary.
+    """
+    return AnalyticsService.get_daily_trips(db, days)

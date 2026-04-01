@@ -1,15 +1,15 @@
 """
 MakFleet Prototype - Database Models
-SQLAlchemy models for the data warehouse (SQLite compatible)
+Legacy SQLAlchemy models for backward compatibility
 """
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from .database import Base
+from .base import Base
 
 
 class Driver(Base):
-    """Driver model"""
+    """Legacy driver model with privacy extensions"""
     __tablename__ = "drivers"
 
     driver_id = Column(Integer, primary_key=True, index=True)
@@ -18,12 +18,18 @@ class Driver(Base):
     license_number = Column(String(50), unique=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # Privacy extensions
+    anonymized_id = Column(String(32), unique=True)  # Privacy: pseudonymized identifier
+    license_hash = Column(String(64))  # Privacy: hashed license
+    privacy_consent = Column(Boolean, default=False)
+    data_retention_days = Column(Integer, default=30)
+
     # Relationships
     vehicles = relationship("Vehicle", back_populates="driver")
 
 
 class Vehicle(Base):
-    """Vehicle model"""
+    """Legacy vehicle model with privacy extensions"""
     __tablename__ = "vehicles"
 
     vehicle_id = Column(Integer, primary_key=True, index=True)
@@ -33,6 +39,10 @@ class Vehicle(Base):
     status = Column(String(20), default="active")
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # Privacy extensions
+    plate_number_hash = Column(String(64))  # Privacy: hashed plate number
+    model_category = Column(String(50))  # Privacy: anonymized model category
+
     # Relationships
     driver = relationship("Driver", back_populates="vehicles")
     telemetry = relationship("Telemetry", back_populates="vehicle")
@@ -40,7 +50,7 @@ class Vehicle(Base):
 
 
 class Telemetry(Base):
-    """Telemetry data model - stores raw IoT sensor data"""
+    """Enhanced telemetry data model with semantic extensions"""
     __tablename__ = "telemetry"
 
     telemetry_id = Column(Integer, primary_key=True, index=True)
@@ -54,12 +64,22 @@ class Telemetry(Base):
     timestamp = Column(DateTime, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # Semantic extensions
+    gps_accuracy = Column(Float, default=10.0)  # GPS accuracy in meters
+    data_quality_score = Column(Float, default=0.8)  # Semantic: data trustworthiness
+    is_validated = Column(Boolean, default=False)
+    semantic_context = Column(Text)  # JSON string of semantic context
+    map_matched = Column(Boolean, default=False)
+    matched_location_id = Column(String(32))
+    match_confidence = Column(Float)
+    provenance_id = Column(String(64))  # Data provenance tracking
+
     # Relationships
     vehicle = relationship("Vehicle", back_populates="telemetry")
 
 
 class Event(Base):
-    """Event model - stores detected events from telemetry"""
+    """Enhanced event model with explainability"""
     __tablename__ = "events"
 
     event_id = Column(Integer, primary_key=True, index=True)
@@ -73,12 +93,18 @@ class Event(Base):
     severity = Column(String(20), default="medium")
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # Explainability extensions
+    confidence_score = Column(Float, default=0.8)  # AI model confidence
+    explanation = Column(Text)  # Explainable AI: why this event occurred
+    causal_factors = Column(Text)  # JSON string of contributing factors
+    ai_detected = Column(Boolean, default=False)  # Whether detected by AI
+
     # Relationships
     vehicle = relationship("Vehicle", back_populates="events")
 
 
 class Location(Base):
-    """Location model - campus zones"""
+    """Enhanced location model with semantic attributes"""
     __tablename__ = "locations"
 
     location_id = Column(Integer, primary_key=True, index=True)
@@ -87,3 +113,58 @@ class Location(Base):
     longitude = Column(Float, nullable=False)
     zone = Column(String(50))
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Semantic extensions
+    zone_type = Column(String(50))  # Academic, Residential, Commercial, etc.
+    is_formal_path = Column(Boolean, default=True)  # Distinguishes roads from footpaths
+    safety_score = Column(Float, default=0.8)
+    capacity = Column(Integer)  # For parking zones
+    operating_hours = Column(Text)  # JSON string of operating hours
+
+
+class Anomaly(Base):
+    """AI-detected anomaly storage"""
+    __tablename__ = "anomalies"
+
+    anomaly_id = Column(String(64), primary_key=True)
+    timestamp = Column(DateTime, nullable=False)
+    anomaly_type = Column(String(50), nullable=False)
+    severity_score = Column(Float, nullable=False)
+    detection_model = Column(String(50))
+    confidence = Column(Float)
+    explanation = Column(Text)
+    causal_factors = Column(Text)  # JSON string
+    affected_entities = Column(Text)  # JSON string of affected vehicle/driver IDs
+    recommended_action = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class EvaluationResult(Base):
+    """Model evaluation results storage"""
+    __tablename__ = "evaluation_results"
+
+    id = Column(Integer, primary_key=True, index=True)
+    model_name = Column(String(100), nullable=False)
+    dataset = Column(String(100), nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+    # Metrics
+    accuracy = Column(Float)
+    precision = Column(Float)
+    recall = Column(Float)
+    f1_score = Column(Float)
+    auc_roc = Column(Float)
+    mse = Column(Float)
+    mae = Column(Float)
+    rmse = Column(Float)
+
+    # Performance
+    inference_time_ms = Column(Float)
+    memory_usage_mb = Column(Float)
+    model_size_mb = Column(Float)
+
+    # Custom metrics
+    spatial_accuracy = Column(Float)
+    temporal_consistency = Column(Float)
+    anomaly_detection_rate = Column(Float)
+    business_value_score = Column(Float)

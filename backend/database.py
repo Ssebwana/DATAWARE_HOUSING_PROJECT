@@ -22,8 +22,8 @@ engine = create_engine(
 # Create SessionLocal class
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Create Base class for models
-Base = declarative_base()
+# Import Base from base module
+from .base import Base
 
 
 def get_db():
@@ -37,7 +37,8 @@ def get_db():
 
 def init_db():
     """Initialize database tables"""
-    from .models import Driver, Vehicle, Telemetry, Event, Location
+    # Import models to ensure they are registered
+    from . import models
     Base.metadata.create_all(bind=engine)
     print("Database tables created")
 
@@ -49,8 +50,8 @@ def clear_telemetry_and_events():
     db = SessionLocal()
     try:
         # Delete all telemetry and events (keep drivers, vehicles, locations)
-        db.query(Telemetry).delete()
-        db.query(Event).delete()
+        db.query(Telemetry).delete(synchronize_session=False)
+        db.query(Event).delete(synchronize_session=False)
         db.commit()
         print("Cleared old telemetry and event data")
     except Exception as e:
