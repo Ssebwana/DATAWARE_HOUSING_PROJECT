@@ -4,21 +4,12 @@
     {
       "src": "backend/main.py",
       "use": "@vercel/python"
-    },
-    {
-      "src": "dashboard/**",
-      "use": "@vercel/static-build",
-      "config": { "distDir": "." }
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
       "dest": "backend/main.py"
-    },
-    {
-      "src": "/dashboard/(.*)",
-      "dest": "dashboard/$1"
     },
     {
       "src": "/login",
@@ -41,10 +32,5 @@
       "dest": "backend/main.py"
     }
   ],
-  "env": {
-    "APP_ENV": "production",
-    "ALGORITHM": "HS256",
-    "ACCESS_TOKEN_EXPIRE_MINUTES": "30"
-  },
   "outputDirectory": "dashboard"
 }
