@@ -17,7 +17,7 @@ from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from .base import Base
 
 # JWT Configuration
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "makfleet-secret-key-change-in-production-2026")
+SECRET_KEY = os.getenv("SECRET_KEY", "makfleet-secret-key-change-in-production-2026")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 
