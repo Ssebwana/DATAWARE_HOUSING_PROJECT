@@ -4,15 +4,19 @@
     {
       "src": "backend/main.py",
       "use": "@vercel/python"
+    },
+    {
+      "src": "dashboard/**",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "backend/main.py"
+      "src": "/static/(.*)",
+      "dest": "dashboard/$1"
     },
     {
-      "src": "/static/(.*)",
+      "src": "/dashboard/(.*)",
       "dest": "dashboard/$1"
     },
     {
@@ -32,11 +36,11 @@
       "dest": "dashboard/profile.html"
     },
     {
-      "src": "/(.+)",
+      "src": "/",
       "dest": "backend/main.py"
     },
     {
-      "src": "/",
+      "src": "/(.*)",
       "dest": "backend/main.py"
     }
   ]
