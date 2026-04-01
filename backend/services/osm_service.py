@@ -223,7 +223,7 @@ class OSMService:
             logger.warning(f"Could not find route between points: {str(e)}")
             return None
 
-    def _extract_route_segments(self, edges_df: gpd.GeoDataFrame) -> List[Dict]:
+    def _extract_route_segments(self, edges_df) -> List[Dict]:
         """Extract route segments from edges DataFrame"""
         segments = []
 
