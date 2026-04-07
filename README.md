@@ -99,6 +99,31 @@ makfleet-prototype/
 2. **Python 3.8+**
 3. **Node.js** (optional, for production)
 
+## External Datasets
+
+### NGSIM Vehicle Trajectory Data
+
+The MakFleet system can be trained using the **NGSIM (Next Generation Simulation)** dataset, which provides high-fidelity vehicle trajectory data including GPS, speed, acceleration, and vehicle classification.
+
+#### Download NGSIM Data
+- **US Government Data Portal**: https://data.transportation.gov/Automobiles/Next-Generation-Simulation-NGSIM-Vehicle-Trajector/8ect-6jqj
+- **FHWA Archive**: https://ops.fhwa.dot.gov/trafficanalysistools/ngsim.htm
+- **Kaggle Mirror**: https://www.kaggle.com/datasets/ahmed3adel/ngsim-i80-and-us101
+
+#### NGSIM Integration Pipeline
+
+```bash
+# 1. Download NGSIM data and place in data/ngsim/raw/
+
+# 2. Run the complete processing pipeline
+python data_pipeline/ngsim_pipeline.py --input data/ngsim/raw/I-80/ --site I-80
+
+# 3. Train ST-GNN model with NGSIM data
+python ai_models/ngsim_training.py --data-path data/ngsim/processed/ --epochs 100
+```
+
+See `data/ngsim/README.md` for detailed documentation.
+
 ## Setup Instructions
 
 ### 1. Database Setup

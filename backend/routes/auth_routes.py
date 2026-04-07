@@ -14,8 +14,9 @@ from ..auth import (
     PasswordResetRequest, PasswordResetVerify, PasswordResetCode,
     authenticate_user, create_access_token, get_password_hash,
     get_current_user, init_default_users, verify_password,
-    get_db, oauth2_scheme, SessionLocal
+    get_db, oauth2_scheme
 )
+from ..database import SessionLocal
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 

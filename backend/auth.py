@@ -66,6 +66,28 @@ class PasswordResetVerify(BaseModel):
     new_password: str
 
 
+class User(BaseModel):
+    """User model for authentication (simplified without DB dependency)"""
+    id: int = 0
+    username: str
+    email: str
+    full_name: str
+    role: str = "driver"
+    is_active: bool = True
+    driver_license: Optional[str] = None
+    assigned_vehicle_id: Optional[int] = None
+
+
+class PasswordResetCode(BaseModel):
+    """Password reset code model (simplified without DB dependency)"""
+    id: int = 0
+    email: str
+    code: str
+    created_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+    is_used: bool = False
+
+
 # Lazy imports to avoid circular dependencies
 def _get_base():
     """Lazy import of Base to avoid circular imports"""
