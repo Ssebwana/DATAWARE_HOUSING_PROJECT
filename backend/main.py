@@ -13,7 +13,7 @@ from .database import init_db, clear_telemetry_and_events
 from .routes import (
     telemetry_routes, event_routes, vehicle_routes,
     semantic_routes, ai_routes, privacy_routes, knowledge_graph_routes,
-    osm_routes, auth_routes, system_routes
+    osm_routes, auth_routes, system_routes, ngsim_routes
 )
 from .services import ai_service, semantic_service
 
@@ -54,6 +54,7 @@ app.include_router(privacy_routes.router, prefix="/api")
 app.include_router(knowledge_graph_routes.router, prefix="/api")
 app.include_router(osm_routes.router, prefix="/api")
 app.include_router(system_routes.router)  # System routes (reports, notifications, profile, settings)
+app.include_router(ngsim_routes.router)  # NGSIM pipeline routes (has /api/ngsim prefix)
 
 
 @app.on_event("startup")

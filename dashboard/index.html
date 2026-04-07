@@ -2552,6 +2552,77 @@
             if (modal) modal.remove();
         }
         
+        // NGSIM Pipeline Functions
+        async function runNGSIMPipeline(action) {
+            console.log(`Running NGSIM pipeline action: ${action}`);
+            try {
+                const response = await fetch('/api/ngsim/' + action, { method: 'POST' });
+                if (response.ok) {
+                    showNotification('success', `${action} operation started!`);
+                    pollPipelineStatus();
+                } else {
+                    const error = await response.json();
+                    showNotification('error', `Failed: ${error.detail}`);
+                }
+            } catch (error) {
+                showNotification('error', `Error: ${error.message}`);
+            }
+        }
+
+        async function trainSTGNN() {
+            console.log('Training ST-GNN model...');
+            try {
+                const response = await fetch('/api/ngsim/train', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ epochs: 100, batch_size: 32, learning_rate: 0.001 })
+                });
+                if (response.ok) {
+                    showNotification('success', 'ST-GNN training started!');
+                    pollPipelineStatus();
+                } else {
+                    const error = await response.json();
+                    showNotification('error', `Failed: ${error.detail}`);
+                }
+            } catch (error) {
+                showNotification('error', `Error: ${error.message}`);
+            }
+        }
+
+        async function evaluateModel() {
+            console.log('Evaluating model...');
+            try {
+                const response = await fetch('/api/ngsim/evaluate', { method: 'POST' });
+                if (response.ok) {
+                    showNotification('success', 'Model evaluation started!');
+                    pollPipelineStatus();
+                } else {
+                    const error = await response.json();
+                    showNotification('error', `Failed: ${error.detail}`);
+                }
+            } catch (error) {
+                showNotification('error', `Error: ${error.message}`);
+            }
+        }
+
+        let statusPollingInterval = null;
+        async function pollPipelineStatus() {
+            if (statusPollingInterval) clearInterval(statusPollingInterval);
+            statusPollingInterval = setInterval(async () => {
+                try {
+                    const response = await fetch('/api/ngsim/status');
+                    if (response.ok) {
+                        const data = await response.json();
+                        const running = Object.values(data.pipeline).some(s => s.status === 'running');
+                        if (!running && statusPollingInterval) {
+                            clearInterval(statusPollingInterval);
+                            statusPollingInterval = null;
+                        }
+                    }
+                } catch (error) { console.error('Status poll error:', error); }
+            }, 2000);
+        }
+
         // Initialize user data and settings
         loadUserData();
         loadUserSettings();
