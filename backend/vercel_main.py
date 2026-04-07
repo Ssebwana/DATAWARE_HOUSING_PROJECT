@@ -341,107 +341,88 @@ def get_profile(token: str):
         "is_active": user.get("is_active", False)
     }
 
-# NGSIM Pipeline Routes
-pipeline_state = {
-    "parse": {"status": "ready", "progress": 0, "message": "Ready to parse NGSIM data"},
-    "transform": {"status": "ready", "progress": 0, "message": "Ready to transform data"},
-    "load": {"status": "ready", "progress": 0, "message": "Ready to load to database"},
-    "train": {"status": "pending", "progress": 0, "message": "Waiting for data to be loaded"},
-    "evaluate": {"status": "pending", "progress": 0, "message": "Waiting for model training"}
-}
+# NGSIM Pipeline Routes - Stateless implementation for serverless environment
+# In serverless, state is simulated per-request since there's no persistent memory
 
 @app.get("/api/ngsim/status")
 def get_pipeline_status():
     """Get current status of all pipeline steps"""
-    return {"pipeline": pipeline_state}
+    # Return simulated state showing completed pipeline
+    return {
+        "pipeline": {
+            "parse": {"status": "completed", "progress": 100, "message": "NGSIM data parsed successfully"},
+            "transform": {"status": "completed", "progress": 100, "message": "Data transformed to MakFleet schema"},
+            "load": {"status": "completed", "progress": 100, "message": "Data loaded to database successfully"},
+            "train": {"status": "completed", "progress": 100, "message": "ST-GNN model trained successfully"},
+            "evaluate": {"status": "completed", "progress": 100, "message": "Model evaluation completed successfully"}
+        },
+        "data_available": True
+    }
 
 @app.post("/api/ngsim/parse")
 def run_parse():
     """Run NGSIM data parsing"""
-    state = pipeline_state["parse"]
-    state["status"] = "running"
-    state["progress"] = 0
-    state["message"] = "Parsing NGSIM data..."
-    # Simulate parsing
-    state["progress"] = 100
-    state["status"] = "completed"
-    state["message"] = "NGSIM data parsed successfully"
-    pipeline_state["transform"]["status"] = "ready"
-    return {"status": "started", "message": "Parse operation completed"}
+    return {
+        "status": "completed",
+        "message": "NGSIM data parsed successfully",
+        "step": "parse",
+        "progress": 100
+    }
 
 @app.post("/api/ngsim/transform")
 def run_transform():
     """Run NGSIM data transformation"""
-    if pipeline_state["parse"]["status"] != "completed":
-        raise HTTPException(status_code=400, detail="Data must be parsed first")
-    state = pipeline_state["transform"]
-    state["status"] = "running"
-    state["progress"] = 0
-    state["message"] = "Transforming data..."
-    # Simulate transformation
-    state["progress"] = 100
-    state["status"] = "completed"
-    state["message"] = "Data transformed to MakFleet schema"
-    pipeline_state["load"]["status"] = "ready"
-    return {"status": "started", "message": "Transform completed"}
+    return {
+        "status": "completed",
+        "message": "Data transformed to MakFleet schema",
+        "step": "transform",
+        "progress": 100
+    }
 
 @app.post("/api/ngsim/load")
 def run_load():
     """Run NGSIM data loading to database"""
-    if pipeline_state["transform"]["status"] != "completed":
-        raise HTTPException(status_code=400, detail="Data must be transformed first")
-    state = pipeline_state["load"]
-    state["status"] = "running"
-    state["progress"] = 0
-    state["message"] = "Loading to database..."
-    # Simulate loading
-    state["progress"] = 100
-    state["status"] = "completed"
-    state["message"] = "Data loaded to database successfully"
-    pipeline_state["train"]["status"] = "ready"
-    pipeline_state["train"]["message"] = "Ready to train ST-GNN model"
-    return {"status": "started", "message": "Database loading completed"}
+    return {
+        "status": "completed",
+        "message": "Data loaded to database successfully",
+        "step": "load",
+        "progress": 100
+    }
 
 @app.post("/api/ngsim/train")
 def run_train():
     """Run ST-GNN model training"""
-    if pipeline_state["load"]["status"] != "completed":
-        raise HTTPException(status_code=400, detail="Data must be loaded first")
-    state = pipeline_state["train"]
-    state["status"] = "running"
-    state["progress"] = 0
-    state["message"] = "Training ST-GNN model..."
-    # Simulate training
-    state["progress"] = 100
-    state["status"] = "completed"
-    state["message"] = "ST-GNN model trained successfully"
-    pipeline_state["evaluate"]["status"] = "ready"
-    pipeline_state["evaluate"]["message"] = "Ready to evaluate model"
-    return {"status": "started", "message": "Model training completed"}
+    return {
+        "status": "completed",
+        "message": "ST-GNN model trained successfully",
+        "step": "train",
+        "progress": 100
+    }
 
 @app.post("/api/ngsim/evaluate")
 def run_evaluate():
     """Run model evaluation"""
-    if pipeline_state["train"]["status"] != "completed":
-        raise HTTPException(status_code=400, detail="Model must be trained first")
-    state = pipeline_state["evaluate"]
-    state["status"] = "running"
-    state["progress"] = 0
-    state["message"] = "Evaluating model..."
-    # Simulate evaluation
-    state["progress"] = 100
-    state["status"] = "completed"
-    state["message"] = "Model evaluation completed successfully"
-    return {"status": "started", "message": "Evaluation completed"}
+    return {
+        "status": "completed",
+        "message": "Model evaluation completed successfully",
+        "step": "evaluate",
+        "progress": 100
+    }
 
 @app.post("/api/ngsim/reset")
 def reset_pipeline():
     """Reset pipeline state"""
-    for step in pipeline_state:
-        pipeline_state[step]["status"] = "ready" if step in ["parse", "transform", "load"] else "pending"
-        pipeline_state[step]["progress"] = 0
-        pipeline_state[step]["message"] = f"Ready to {step}" if step in ["parse", "transform", "load"] else f"Waiting for previous steps"
-    return {"status": "success", "message": "Pipeline state reset"}
+    return {
+        "status": "success",
+        "message": "Pipeline state reset",
+        "pipeline": {
+            "parse": {"status": "ready", "progress": 0, "message": "Ready to parse NGSIM data"},
+            "transform": {"status": "ready", "progress": 0, "message": "Ready to transform data"},
+            "load": {"status": "ready", "progress": 0, "message": "Ready to load to database"},
+            "train": {"status": "pending", "progress": 0, "message": "Waiting for data to be loaded"},
+            "evaluate": {"status": "pending", "progress": 0, "message": "Waiting for model training"}
+        }
+    }
 
 # Static files
 app.mount("/static", StaticFiles(directory="dashboard"), name="static")
