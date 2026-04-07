@@ -63,3 +63,16 @@ htmlcov/
 .coverage.*
 .coveragerc
 coverage.xml
+
+# Large data files (exceeds GitHub 100MB limit)
+data/ngsim/raw/*.csv
+data/ngsim/raw/
+data/*.csv
+data/*.txt
+*.parquet
+*.feather
+
+# Model checkpoints (can be large)
+ai_models/checkpoints/
+*.pth
+*.pt
