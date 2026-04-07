@@ -3,16 +3,21 @@ NGSIM Training Adapter for ST-GNN Model
 
 Adapts NGSIM data for training the MakFleet ST-GNN model.
 Provides data loading, preprocessing, and training utilities.
+Supports trajectory prediction, speed forecasting, and event detection.
 """
 
 import os
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from typing import Dict, List, Optional, Tuple, Union
 import logging
 from datetime import datetime
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+import matplotlib.pyplot as plt
+import json
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

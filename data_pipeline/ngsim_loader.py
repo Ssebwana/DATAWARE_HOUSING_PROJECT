@@ -3,6 +3,7 @@ NGSIM Data Loader
 
 Loads transformed NGSIM data into MakFleet PostgreSQL database.
 Handles batch inserts, conflict resolution, and data validation.
+Optimized for high-performance bulk loading with connection pooling.
 """
 
 import pandas as pd
@@ -10,10 +11,11 @@ import numpy as np
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 import psycopg2
-from psycopg2 import sql, extras
+from psycopg2 import sql, extras, pool
 import argparse
 import json
 import os
+import time
 import logging
 
 # Configure logging
@@ -22,19 +24,34 @@ logger = logging.getLogger(__name__)
 
 
 class NGSIMLoader:
-    """Loads transformed NGSIM data into MakFleet database"""
+    """Loads transformed NGSIM data into MakFleet database with optimized bulk loading"""
     
-    def __init__(self, database_url: str = None):
+    def __init__(self, database_url: str = None, 
+                 batch_size: int = 5000,
+                 use_connection_pool: bool = True,
+                 pool_size: int = 3):
         """
         Initialize NGSIM loader
         
         Args:
             database_url: PostgreSQL connection string
                          If None, reads from DATABASE_URL environment variable
+            batch_size: Number of records per batch insert
+            use_connection_pool: Whether to use connection pooling
+            pool_size: Size of connection pool
         """
         self.database_url = database_url or os.getenv('DATABASE_URL')
         self.connection = None
-        self.batch_size = 1000  # Records per batch insert
+        self.batch_size = batch_size
+        self.use_connection_pool = use_connection_pool
+        self.pool = None
+        self.pool_size = pool_size
+        self.stats = {
+            'start_time': None,
+            'end_time': None,
+            'total_records': 0,
+            'records_per_second': 0
+        }
         
     def connect(self):
         """Establish database connection"""
