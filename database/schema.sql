@@ -279,6 +279,75 @@ CREATE TABLE IF NOT EXISTS evaluation_results (
     business_value_score FLOAT
 );
 
+-- Model metrics table (for tracking trained model performance)
+CREATE TABLE IF NOT EXISTS model_metrics (
+    id SERIAL PRIMARY KEY,
+    model_name VARCHAR(100) NOT NULL,
+    model_version VARCHAR(20) DEFAULT '1.0',
+    accuracy DECIMAL(5,2),
+    precision DECIMAL(5,2),
+    recall DECIMAL(5,2),
+    f1_score DECIMAL(5,2),
+    auc_roc DECIMAL(5,2),
+    ade DECIMAL(5,2),  -- Average Displacement Error
+    fde DECIMAL(5,2),  -- Final Displacement Error
+    training_samples INTEGER,
+    validation_samples INTEGER,
+    epochs INTEGER,
+    batch_size INTEGER,
+    learning_rate DECIMAL(10,6),
+    training_duration_sec FLOAT,
+    trained_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Training history table (for tracking training progression)
+CREATE TABLE IF NOT EXISTS training_history (
+    id SERIAL PRIMARY KEY,
+    model_name VARCHAR(100) NOT NULL,
+    epoch INTEGER NOT NULL,
+    loss DECIMAL(10,6) NOT NULL,
+    val_loss DECIMAL(10,6),
+    accuracy DECIMAL(5,2),
+    val_accuracy DECIMAL(5,2),
+    learning_rate DECIMAL(10,6),
+    duration_sec FLOAT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Daily analytics summary table
+CREATE TABLE IF NOT EXISTS daily_analytics (
+    id SERIAL PRIMARY KEY,
+    date DATE NOT NULL UNIQUE,
+    total_vehicles INTEGER DEFAULT 0,
+    active_vehicles INTEGER DEFAULT 0,
+    total_trips INTEGER DEFAULT 0,
+    total_events INTEGER DEFAULT 0,
+    anomalies_detected INTEGER DEFAULT 0,
+    data_quality_score DECIMAL(5,2) DEFAULT 0,
+    avg_accuracy DECIMAL(5,2) DEFAULT 0,
+    avg_speed DECIMAL(5,2),
+    max_speed DECIMAL(5,2),
+    harsh_braking_count INTEGER DEFAULT 0,
+    overspeed_count INTEGER DEFAULT 0,
+    rapid_acceleration_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- System performance metrics table
+CREATE TABLE IF NOT EXISTS system_metrics (
+    id SERIAL PRIMARY KEY,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    cpu_usage DECIMAL(5,2),
+    memory_usage DECIMAL(5,2),
+    response_time_ms INTEGER,
+    inference_time_ms INTEGER,
+    active_connections INTEGER,
+    requests_per_minute INTEGER,
+    error_rate DECIMAL(5,2)
+);
+
 -- ============================================
 -- CREATE INDEXES
 -- ============================================

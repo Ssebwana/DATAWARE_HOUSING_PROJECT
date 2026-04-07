@@ -9,3 +9,4 @@ from . import knowledge_graph_routes
 from . import auth_routes
 from . import user_routes
 from . import ngsim_routes
+from . import analytics_routes
