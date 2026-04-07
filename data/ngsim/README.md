@@ -62,8 +62,11 @@ data/ngsim/
 
 ## Usage
 
+### Quick Start (Full Dataset)
+
 ```bash
 # 1. Download NGSIM data and place in data/ngsim/raw/
+# Note: Full dataset is ~2GB. Use sampling for faster processing.
 
 # 2. Run the processing pipeline
 python data_pipeline/ngsim_pipeline.py --input data/ngsim/raw/I-80/ --output data/ngsim/processed/
@@ -72,8 +75,46 @@ python data_pipeline/ngsim_pipeline.py --input data/ngsim/raw/I-80/ --output dat
 python data_pipeline/ngsim_loader.py --input data/ngsim/processed/telemetry.csv
 
 # 4. Train ST-GNN model with NGSIM data
-python ai_models/train_with_ngsim.py
+python ai_models/ngsim_training.py --data-path data/ngsim/processed/
 ```
+
+### Recommended: Using Sampled Data (Smaller Size)
+
+The full NGSIM dataset is ~2GB with 11.8 million records. For development and testing, use the sampler to create a smaller dataset:
+
+```bash
+# Sample 5% of vehicles and 10% of frames (99.5% reduction)
+# Result: ~10MB file with 54,000 records (perfect for testing)
+python data_pipeline/ngsim_sampler.py \
+    --input data/ngsim/raw/ngsim_data.csv \
+    --output data/ngsim/raw/ngsim_data_sampled.csv \
+    --vehicle-ratio 0.05 \
+    --frame-ratio 0.1 \
+    --max-vehicles 100
+
+# Then process the sampled data
+python data_pipeline/ngsim_pipeline.py \
+    --input data/ngsim/raw/ngsim_data_sampled.csv \
+    --output data/ngsim/processed/
+```
+
+### Sampling Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--vehicle-ratio` | 0.1 | Fraction of vehicles to keep (0.01-1.0) |
+| `--frame-ratio` | 0.2 | Fraction of frames to keep per vehicle |
+| `--max-vehicles` | 200 | Maximum number of vehicles to sample |
+| `--seed` | 42 | Random seed for reproducibility |
+
+### Recommended Sampling Ratios
+
+| Use Case | Vehicle Ratio | Frame Ratio | Result Size | Records |
+|----------|---------------|-------------|-------------|---------|
+| Quick testing | 5% | 10% | ~10 MB | 54K |
+| Development | 10% | 20% | ~40 MB | 200K |
+| Model training | 25% | 50% | ~250 MB | 1.5M |
+| Full analysis | 100% | 100% | ~2 GB | 11.8M |
 
 ## Data Schema Mapping
 
