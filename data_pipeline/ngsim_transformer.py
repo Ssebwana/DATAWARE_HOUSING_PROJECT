@@ -121,10 +121,14 @@ class NGSIMTransformer:
     def _transform_vehicles(self, df: pd.DataFrame) -> pd.DataFrame:
         """Transform NGSIM vehicle data to MakFleet format"""
         
+        # Handle different column name formats
+        class_col = 'v_Class' if 'v_Class' in df.columns else 'Veh_Class'
+        length_col = 'v_length' if 'v_length' in df.columns else 'Veh_Length'
+        
         # Get unique vehicles
         unique_vehicles = df.groupby('Vehicle_ID').agg({
-            'Veh_Class': 'first',
-            'Veh_Length': 'mean',
+            class_col: 'first',
+            length_col: 'mean',
             'site': 'first'
         }).reset_index()
         
@@ -139,9 +143,9 @@ class NGSIMTransformer:
         vehicles = pd.DataFrame({
             'vehicle_id': unique_vehicles['Vehicle_ID'] + self.VEHICLE_ID_OFFSET,
             'plate_number': unique_vehicles['Vehicle_ID'].apply(lambda x: f'NGSIM_{x:05d}'),
-            'model': unique_vehicles['Veh_Class'].map(class_mapping),
+            'model': unique_vehicles[class_col].map(class_mapping),
             'status': 'active',
-            'model_category': unique_vehicles['Veh_Class'].map(class_mapping),
+            'model_category': unique_vehicles[class_col].map(class_mapping),
             'driver_id': unique_vehicles['Vehicle_ID'].apply(lambda x: (x % 5) + 1)  # Map to existing drivers
         })
         

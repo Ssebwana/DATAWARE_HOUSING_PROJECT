@@ -102,7 +102,7 @@ class NGSIMParser:
         Parse a single NGSIM trajectory file
         
         Args:
-            filepath: Path to NGSIM .txt file
+            filepath: Path to NGSIM .txt or .csv file
             
         Returns:
             DataFrame with parsed trajectory data
@@ -110,29 +110,56 @@ class NGSIMParser:
         logger.info(f"Parsing NGSIM file: {filepath}")
         
         try:
-            # NGSIM files are space-delimited with header comments
-            df = pd.read_csv(
-                filepath,
-                delim_whitespace=True,
-                comment='#',
-                header=0,
-                dtype={
-                    'Frame_ID': np.int32,
-                    'Vehicle_ID': np.int32,
-                    'Local_X': np.float32,
-                    'Local_Y': np.float32,
-                    'v_Vel': np.float32,
-                    'v_Acc': np.float32,
-                    'Lane_ID': np.int8,
-                    'Prec_Veh_ID': np.int32,
-                    'Fol_Veh_ID': np.int32,
-                    'Spacing': np.float32,
-                    'Headway': np.float32,
-                    'Veh_Class': np.int8,
-                    'Veh_Length': np.float32,
-                    'Veh_Type': np.int8
-                }
-            )
+            # Detect file type based on extension
+            is_csv = filepath.lower().endswith('.csv')
+            
+            if is_csv:
+                # CSV format (from data.transportation.gov)
+                # Numbers may have thousands separators (e.g., '9,999')
+                df = pd.read_csv(
+                    filepath,
+                    thousands=',',  # Handle thousands separators
+                    dtype={
+                        'Frame_ID': np.int32,
+                        'Vehicle_ID': np.int32,
+                        'Local_X': np.float32,
+                        'Local_Y': np.float32,
+                        'v_Vel': np.float32,
+                        'v_Acc': np.float32,
+                        'Lane_ID': np.int8,
+                        'Prec_Veh_ID': np.int32,
+                        'Fol_Veh_ID': np.int32,
+                        'Spacing': np.float32,
+                        'Headway': np.float32,
+                        'Veh_Class': np.int8,
+                        'Veh_Length': np.float32,
+                        'Veh_Type': np.int8
+                    }
+                )
+            else:
+                # Space-delimited format (original NGSIM .txt files)
+                df = pd.read_csv(
+                    filepath,
+                    delim_whitespace=True,
+                    comment='#',
+                    header=0,
+                    dtype={
+                        'Frame_ID': np.int32,
+                        'Vehicle_ID': np.int32,
+                        'Local_X': np.float32,
+                        'Local_Y': np.float32,
+                        'v_Vel': np.float32,
+                        'v_Acc': np.float32,
+                        'Lane_ID': np.int8,
+                        'Prec_Veh_ID': np.int32,
+                        'Fol_Veh_ID': np.int32,
+                        'Spacing': np.float32,
+                        'Headway': np.float32,
+                        'Veh_Class': np.int8,
+                        'Veh_Length': np.float32,
+                        'Veh_Type': np.int8
+                    }
+                )
             
             # Add metadata
             df['site'] = self.site_name
@@ -209,6 +236,10 @@ class NGSIMParser:
         """
         logger.info("Validating NGSIM data")
         
+        # Handle different column name formats
+        # CSV from data.transportation.gov uses 'v_Class', original NGSIM uses 'Veh_Class'
+        class_col = 'v_Class' if 'v_Class' in df.columns else 'Veh_Class'
+        
         # Create validation flags
         valid_mask = (
             df['Local_X'].notna() & 
@@ -216,7 +247,7 @@ class NGSIMParser:
             df['v_Vel'].notna() &
             df['Vehicle_ID'].notna() &
             (df['v_Vel'] >= 0) &  # Negative speed is invalid
-            (df['Veh_Class'] >= 1) & (df['Veh_Class'] <= 4)  # Valid vehicle class
+            (df[class_col] >= 1) & (df[class_col] <= 4)  # Valid vehicle class
         )
         
         valid_df = df[valid_mask].copy()
@@ -236,11 +267,14 @@ class NGSIMParser:
         Returns:
             Dictionary of statistics
         """
+        # Handle different column name formats
+        class_col = 'v_Class' if 'v_Class' in df.columns else 'Veh_Class'
+        
         stats = {
             'total_records': len(df),
             'unique_vehicles': df['Vehicle_ID'].nunique(),
             'unique_frames': df['Frame_ID'].nunique(),
-            'vehicle_classes': df['Veh_Class'].value_counts().to_dict(),
+            'vehicle_classes': df[class_col].value_counts().to_dict(),
             'sites': df['site'].value_counts().to_dict() if 'site' in df.columns else {},
             'time_periods': df['time_period'].value_counts().to_dict() if 'time_period' in df.columns else {},
             'speed_stats': {
